@@ -184,4 +184,12 @@ class Runtime:
         receipt = self.run(spec)
         sample = receipt["samples"]["chat"]
         result = json.loads((self.root / run_id / sample["attempt"] / "result.json").read_text())
-        return {"result": result, "receipt": receipt}
+        text = result["output_text"]
+        reasoning = ""
+        if "</think>" in text:
+            reasoning, text = text.split("</think>", 1)
+            reasoning = reasoning.removeprefix("<think>").strip()
+        message = {"role": "assistant", "content": text.strip()}
+        if reasoning:
+            message["reasoning_content"] = reasoning
+        return {"result": result, "receipt": receipt, "assistant_message": message}

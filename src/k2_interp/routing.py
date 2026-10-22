@@ -43,7 +43,9 @@ def route(logits: torch.Tensor, block) -> dict[str, torch.Tensor]:
     }
 
 
-def sparse_forward(block, hidden_states: torch.Tensor, edit) -> tuple[torch.Tensor, torch.Tensor]:
+def sparse_forward(
+    block, hidden_states: torch.Tensor, edit, observe=None
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Intervention-only reference forward; identity is tested against native K2.
 
     We preserve native expert accumulation order and shared-expert computation.
@@ -72,6 +74,8 @@ def sparse_forward(block, hidden_states: torch.Tensor, edit) -> tuple[torch.Tens
     if not bool(torch.isfinite(weights).all()) or bool((weights < 0).any()):
         raise ValueError("Expert weights must be finite and nonnegative")
     weights = weights.to(hidden_states.dtype)
+    if observe is not None:
+        observe({**routes, "expert_ids": ids, "expert_weights": weights.float()})
     output = torch.zeros_like(flat)
     mask = F.one_hot(ids, num_classes=block.num_experts).permute(2, 1, 0)
     for expert_idx in torch.greater(mask.sum(dim=(-1, -2)), 0).nonzero():

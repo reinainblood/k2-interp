@@ -27,7 +27,11 @@ artifacts = modal.Volume.from_name(
     "k2-interp-artifacts", environment_name=ENVIRONMENT, create_if_missing=True
 )
 # Optional existing cache is read-only and must pass full shard hashes before reuse.
-legacy = modal.Volume.from_name("k2-horizon-bf16-weights", environment_name=ENVIRONMENT)
+reuse_volume = os.environ.get("K2_REUSE_VOLUME", "")
+legacy_mounts = (
+    {"/legacy": modal.Volume.from_name(reuse_volume, environment_name=ENVIRONMENT).with_mount_options(read_only=True)}
+    if reuse_volume else {}
+)
 
 image = (
     modal.Image.debian_slim(python_version="3.11")
@@ -53,13 +57,15 @@ image = (
     memory=32768,
     timeout=21600,
     max_containers=1,
-    volumes={"/weights": weights, "/legacy": legacy.with_mount_options(read_only=True)},
+    volumes={"/weights": weights, **legacy_mounts},
 )
 def prepare_checkpoint(reuse_subdir: str = ""):
     from k2_interp.weights import prepare
 
     if reuse_subdir and ("/" in reuse_subdir or ".." in reuse_subdir):
         raise ValueError("reuse_subdir must be a single checkpoint directory name")
+    if reuse_subdir and not reuse_volume:
+        raise ValueError("Set K2_REUSE_VOLUME when deploying to mount the existing cache read-only")
     return prepare(
         CHECKPOINT,
         "/weights",
@@ -74,7 +80,7 @@ def prepare_checkpoint(reuse_subdir: str = ""):
     timeout=60,
     volumes={
         "/weights": weights.with_mount_options(read_only=True),
-        "/legacy": legacy.with_mount_options(read_only=True),
+        **legacy_mounts,
     },
 )
 def preflight():
@@ -98,13 +104,13 @@ def preflight():
     min_containers=0,
     max_containers=1,
     buffer_containers=0,
-    scaledown_window=60,
+    scaledown_window=int(os.environ.get("K2_IDLE_SECONDS", "300")),
     timeout=7200,
     startup_timeout=1800,
     retries=0,
     volumes={
         "/weights": weights.with_mount_options(read_only=True),
-        "/legacy": legacy.with_mount_options(read_only=True),
+        **legacy_mounts,
         "/artifacts": artifacts,
     },
 )
@@ -137,6 +143,27 @@ class NativeWorker:
 
         artifacts.reload()
         return intervention_sweep(self.runtime, **request)
+
+    @modal.method()
+    def graph(self, request: dict):
+        from k2_interp.causal import feature_graph
+
+        artifacts.reload()
+        return feature_graph(self.runtime, **request)
+
+    @modal.method()
+    def attribute(self, request: dict):
+        from k2_interp.causal import attribute_features
+
+        artifacts.reload()
+        return attribute_features(self.runtime, **request)
+
+    @modal.method()
+    def fidelity(self, request: dict):
+        from k2_interp.causal import reconstruction_fidelity
+
+        artifacts.reload()
+        return reconstruction_fidelity(self.runtime, **request)
 
     @modal.method()
     def smoke(self, run_id: str):
@@ -233,7 +260,7 @@ def api():
             "choices": [
                 {
                     "index": 0,
-                    "message": {"role": "assistant", "content": result["output_text"]},
+                    "message": response["assistant_message"],
                     "finish_reason": result["finish_reason"],
                 }
             ],

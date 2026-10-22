@@ -183,6 +183,13 @@ def train_from_config(config: dict, *, root: str | Path = ".", commit=lambda: No
     if cfg.kind == "sae":
         if len(ds.input_views) != 1 or len(ds.target_views) != 1 or view_pairs[0] != view_pairs[1]:
             raise ValueError("An SAE must reconstruct the identical activation view")
+    if cfg.kind == "crosscoder":
+        inputs = [(v["run"], v["site"]) for v in ds.manifest["views"] if v["role"] == "input"]
+        targets = [(v["run"], v["site"]) for v in ds.manifest["views"] if v["role"] == "target"]
+        if inputs != targets or len({v[0] for v in inputs}) < 2:
+            raise ValueError(
+                "Checkpoint crosscoder must reconstruct the same ordered checkpoint views"
+            )
     torch.manual_seed(cfg.seed)
     model = SparseDictionary(ds.input_dims, ds.target_dims, cfg.width, cfg.k, cfg.kind).to(
         cfg.device
@@ -191,6 +198,12 @@ def train_from_config(config: dict, *, root: str | Path = ".", commit=lambda: No
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.learning_rate)
     output.mkdir(parents=True, exist_ok=True)
     identity = digest({"config": config, "dataset": ds.manifest["dataset_sha256"]})
+    if (output / "dictionary.json").exists():
+        previous = json.loads((output / "dictionary.json").read_text())
+        if previous.get("training_identity") != identity:
+            raise ValueError("Completed dictionary belongs to another training configuration")
+        load_dictionary(output)
+        return previous
     checkpoint = output / "training-state.pt"
     step, start_epoch, start_batch = 0, 0, 0
     if checkpoint.exists():
@@ -219,6 +232,7 @@ def train_from_config(config: dict, *, root: str | Path = ".", commit=lambda: No
         temp.replace(checkpoint)
         commit()
 
+    next_epoch, next_batch = start_epoch, start_batch
     for epoch in range(start_epoch, cfg.epochs):
         for batch, (x, y) in enumerate(
             ds.batches("train", cfg.batch_size, seed=cfg.seed + epoch, shuffle=True)
@@ -238,26 +252,31 @@ def train_from_config(config: dict, *, root: str | Path = ".", commit=lambda: No
             optimizer.step()
             model.normalize_decoder()
             step += 1
+            next_epoch, next_batch = epoch, batch + 1
             if step % cfg.checkpoint_steps == 0:
                 save_state(epoch, batch + 1)
         if step >= cfg.max_steps:
             break
+        next_epoch, next_batch = epoch + 1, 0
         save_state(epoch + 1, 0)
-    save_state(epoch, batch + 1)
+    save_state(next_epoch, next_batch)
     # Calibrate inference threshold on a bounded training-only reservoir, not held-out labels.
     with torch.no_grad():
         candidates = []
+        calibration_rows = 0
         for i, (x, _) in enumerate(
             ds.batches("train", cfg.batch_size, seed=cfg.seed, shuffle=True)
         ):
             x = x.to(cfg.device)
+            calibration_rows += len(x)
             pre = model.encoder((x - model.input_mean) / model.input_scale).relu()
             candidates.append(pre.flatten().topk(min(pre.numel(), cfg.k * len(x) * 2)).values.cpu())
             if i >= 15:
                 break
         reservoir = torch.cat(candidates)
-        # The reservoir retains 2k candidates per row; selecting its upper half targets mean k.
-        model.threshold.copy_(reservoir.median().to(cfg.device))
+        wanted = min(cfg.k * calibration_rows, reservoir.numel())
+        cutoff = reservoir.kthvalue(max(1, reservoir.numel() - wanted + 1)).values
+        model.threshold.copy_(cutoff.to(cfg.device))
     metrics = evaluate(model, ds, batch_size=cfg.batch_size)
     state_path = output / "dictionary.safetensors"
     save_file(
@@ -267,6 +286,7 @@ def train_from_config(config: dict, *, root: str | Path = ".", commit=lambda: No
         "schema": "k2-interp/dictionary/1",
         **model.metadata(),
         "training": cfg.model_dump(),
+        "training_identity": identity,
         "dataset_sha256": ds.manifest["dataset_sha256"],
         "views": ds.manifest["views"],
         "steps": step,

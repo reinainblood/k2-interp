@@ -106,9 +106,18 @@ def build_dataset(views: list[dict], output: str | Path) -> dict:
         )
     if not shards:
         raise ValueError("No aligned activation rows")
+    provenance_views = [
+        {
+            **v,
+            "source_identity": json.loads((Path(v["run"]) / "manifest.json").read_text())[
+                "identity"
+            ],
+        }
+        for v in views
+    ]
     manifest = {
         "schema": SCHEMA_VERSION,
-        "views": views,
+        "views": provenance_views,
         "dimensions": dimensions,
         "shards": shards,
         "source_requests": [

@@ -33,6 +33,7 @@ class NativeTrace(AbstractContextManager):
         self.step = 0
         self.phase = "prefill"
         self.routes = {}
+        self.effective_routes = {}
         self.applied = set()
         self.layers = model.model.layers
         wanted = spec.layers + [p.layer for p in self.interventions]
@@ -48,6 +49,7 @@ class NativeTrace(AbstractContextManager):
     def begin(self, positions: list[int], *, step: int, phase: str) -> None:
         self.positions, self.step, self.phase = positions, step, phase
         self.routes.clear()
+        self.effective_routes.clear()
 
     def _selected(self, tensor):
         if tensor.shape[0] != 1:
@@ -154,7 +156,9 @@ class NativeTrace(AbstractContextManager):
     def _moe_post(self, layer):
         def hook(block, args, result):
             if self.spec.router:
-                routes = route(result[1], block)
+                routes = self.effective_routes.get(layer)
+                if routes is None:
+                    routes = route(result[1], block)
                 batch, length = args[0].shape[:2]
                 self.emit(
                     layer, {k: v.reshape(batch, length, *v.shape[1:]) for k, v in routes.items()}
@@ -219,7 +223,12 @@ class NativeTrace(AbstractContextManager):
                         self.originals.append((block.mlp, block.mlp.forward))
 
                         def forward(m, x, layer=i):
-                            return sparse_forward(m, x, lambda kind, t: self.edit(layer, kind, t))
+                            return sparse_forward(
+                                m,
+                                x,
+                                lambda kind, t: self.edit(layer, kind, t),
+                                lambda routed: self.effective_routes.__setitem__(layer, routed),
+                            )
 
                         block.mlp.forward = types.MethodType(forward, block.mlp)
             return self
@@ -235,4 +244,5 @@ class NativeTrace(AbstractContextManager):
         self.handles.clear()
         self.originals.clear()
         self.routes.clear()
+        self.effective_routes.clear()
         return False
