@@ -33,6 +33,30 @@ def main():
     evaluations = analyze.remote(
         {"operation": "evaluate", "run": base, "output": base + "/evaluation.json"}
     )
+    volume = modal.Volume.from_name("k2-interp-artifacts", environment_name="FDR")
+
+    def result_for(sample_id):
+        attempt = capture["samples"][sample_id]["attempt"]
+        return json.loads(b"".join(volume.read_file(base + "/" + attempt + "/result.json")))
+
+    localization = analyze.remote(
+        {
+            "operation": "localize",
+            "run": base,
+            "pairs": [
+                {
+                    "clean_id": "france",
+                    "control_id": "italy",
+                    "clean_position": len(result_for("france")["input_ids"]) - 1,
+                    "control_position": len(result_for("italy")["input_ids"]) - 1,
+                    "group": "capital-statement",
+                }
+            ],
+            "sites": ["layers.30.resid_post"],
+            "output": base + "/localization",
+        }
+    )
+    assert localization["metrics"][0]["mean_pair_l2"] > 0
     training = {}
     for kind in ("sae", "skip_transcoder"):
         x = "resid_post" if kind == "sae" else "moe_in"
@@ -101,6 +125,7 @@ def main():
         "run_id": name,
         "capture": capture,
         "evaluation": evaluations,
+        "localization": localization,
         "training": training,
         "fidelity": fidelity,
         "attribution": attribution,
