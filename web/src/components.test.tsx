@@ -37,7 +37,7 @@ describe("literal data views", () => {
     );
     expect(
       screen
-        .getByRole("button", { name: "10 t10" })
+        .getByTitle("p10 / ID 10 / t10")
         .getAttribute("aria-pressed"),
     ).toBe("true");
   });
