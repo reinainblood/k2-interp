@@ -27,9 +27,52 @@ BF16, and native whole-layer model parallelism.
 The checks after loading took about 25.8 seconds. This is a runtime test on a neutral
 factual prompt, not a study result or a throughput benchmark.
 
-Final verification of the packed trace format and the neutral dictionary/graph
-integration pipeline is in progress. Full-model receipts are kept in private artifact
-storage; this page reports only reviewed software-verification metadata.
+## Packed-format and pipeline verification
+
+The packed-format smoke passed on the same full SFT3 checkpoint at runtime commit
+`cad37e7c48c41e36f8d30af9f42e95d3b29748e7`, with sequential weight transfers and
+CUDA 13.0. All checks above passed again, including the identical -12.0379-nat
+ablation delta. Post-load checks took about 19.7 seconds.
+
+The neutral integration exercise also passed on that deployed runtime:
+
+- Three factual teacher-forced examples captured and summarized.
+- Matched residual localization on the actual layer-30 residuals.
+- SAE and skip-transcoder datasets built, trained on an A100-80GB, and reloaded.
+- Reconstruction insertion evaluated inside the original 375B model.
+- Gradient × feature attribution computed through the original model.
+- Finite feature interventions produced a total-effect graph, with an exactly zero
+  identity-dose effect and successful unmodified-model cleanup.
+
+The dictionaries received only **two training steps**. This verifies the software
+path, not dictionary quality or scientific interpretability. The cohort has three
+examples and is unsuitable for a scientific conclusion. Checkpoint crosscoders are
+covered by numerical/integration tests on aligned synthetic views; a full-size
+multi-checkpoint crosscoder study has not been run.
+
+## Native chat verification
+
+Two live SDK chat turns passed at runtime commit
+`51d848be277fb0bbb22153add721b19379c8b34a`. The responses contained 42 and 27 tokens,
+both ending at EOS. The second turn accepted the first turn's native thinking field.
+The tokenizer boundary explicitly requests a flat token-ID sequence, and native
+IFM thinking delimiters are preserved across history rendering.
+
+The final retention change at `13ea557a6e915adfc029c3c3a7e659c5b2372404` adds exact
+processed-token IDs/log probabilities to partial checkpoints. It is covered by a
+native-code interruption regression test. The full-weight receipts above predate
+that metadata-only change; no additional full-weight replay is claimed for it.
+
+## Current checks and scope
+
+- 26 tests pass against pinned native model/tokenizer source and synthetic data.
+- Ruff, formatting, wheel/source builds, and GitHub CI pass.
+- HTTP anonymous denial is verified. Authenticated HTTP is not verified in the
+  execution workspace because no new proxy token could be created at its quota.
+  SDK/CLI authentication and real model calls are verified independently.
+- Raw full-model receipts and outputs remain in private artifact storage. This page
+  reports only reviewed software-verification metadata.
+- No private behavioral study has been run, and no concept/circuit discovery is claimed.
 
 ## Checkpoint inventory
 

@@ -6,6 +6,12 @@ A reproducible interpretability runtime for **IFM K2 Horizon 375B**. Run chat,
 teacher-forced evaluations, and interventions across the released checkpoint tree,
 then collect aligned router traces and activations for sparse dictionary analysis.
 
+**Verified on full SFT3 weights:** native captures across all 58 MoE layers, causal
+patching, seeded generation, two-turn chat, and a small neutral dictionary/feature
+analysis workflow on eight H200s. See [the verification record](docs/verification.md)
+for exact tested revisions, remaining scope, and the distinction between software
+checks and scientific results.
+
 The runtime is experiment-agnostic. Prompts, chats, traces, trained dictionaries,
 and private study results stay outside Git. Examples use public factual questions.
 No scientific finding is implied by a successful software test.
