@@ -63,16 +63,60 @@ processed-token IDs/log probabilities to partial checkpoints. It is covered by a
 native-code interruption regression test. The full-weight receipts above predate
 that metadata-only change; no additional full-weight replay is claimed for it.
 
+## Live web workbench verification (October 22, 2026)
+
+The separate FDR controller passed authenticated HTTP, SSE, token inspection,
+capture ZIP, and full-conversation export checks against the **full SFT3 weights**.
+The worker source was `f4c07fc506f08538dc28062a7905a9d1a4da1f27`; the checkpoint
+remains `cfd157f11804b290c47521311874fa24870c5b1e`. Controller fixes were deployed
+independently while the same GPU container continued its initial weight load.
+
+- Two HTTP chat turns produced 25 and 10 output tokens and ended at EOS.
+- The first used medium reasoning; the second used low reasoning and an edited
+  system prompt. Stored requests matched those settings, with native history tags
+  preserved. These were bounded software checks, not upstream benchmark settings.
+- The client observed 59 and 25 streamed snapshots, including intermediate frames
+  with only some layers available. Final captures contained all 58 MoE layers.
+- Exact expert IDs and weights in the live projection matched reads from verified
+  raw tensor artifacts. Expert-output norms and residuals were captured at layers
+  10, 30, and 50. Native selected weights summed to approximately 2.5.
+- Both downloaded numeric capture bundles and the two-turn conversation archive
+  passed inventory/hash verification.
+- A separate full-weight baseline/captured teacher-forced pair had a maximum
+  absolute difference of **0.0** in the tested continuation-token log probabilities,
+  with routing, residuals, and expert-output norms enabled for the captured run.
+- The actual browser composer, system editor, high-reasoning setting, token search,
+  linked plots, and download button were exercised on a private input. A capture
+  downloaded while generation was active passed all 10 file hashes and correctly
+  reported partial conversation coverage. The deliberately short 128-token run
+  ended at the output limit, inside reasoning; it did not produce a final answer.
+  This demonstrates the limit/retention path, not a completed behavioral study.
+- Real-data layouts were inspected at widths 320, 768, 1024, and 1440 with no
+  horizontal document overflow. No browser console errors/warnings were observed.
+
+The workbench displays exact captures with coalesced delivery; it does not promise
+that every intermediate layer notification reaches the browser. Raw per-forward
+artifacts are the durable record. The native instrumentation path is much slower
+than optimized TP/EP serving. In this run weight loading alone took about 6m45s,
+in addition to container initialization. An empty final-answer field at a short
+reasoning-token limit is distinct from a server failure.
+
+Reproducers: `scripts/verify_workbench.py`, `scripts/verify_live_parity.py`, and
+`scripts/verify_workbench_session.py`. Private receipts and conversations are not
+published in this repository. No touch-specific feature or causal finding is claimed.
+
 ## Current checks and scope
 
-- 26 tests pass against pinned native model/tokenizer source and synthetic data.
+- 43 Python tests and 5 frontend tests cover native model/tokenizer source,
+  synthetic data, authentication, capture integrity, exports, and editable controls.
 - Ruff, formatting, wheel/source builds, and GitHub CI pass.
-- HTTP anonymous denial is verified. Authenticated HTTP is not verified in the
-  execution workspace because no new proxy token could be created at its quota.
-  SDK/CLI authentication and real model calls are verified independently.
+- Workbench HTTP anonymous denial and authenticated real model calls are verified.
+  The original proxy-protected OpenAI-compatible gateway remains separate: its
+  authenticated HTTP route was not verified because the workspace had no free
+  proxy-token slot. The workbench uses its own SDK-issued browser sessions.
 - Raw full-model receipts and outputs remain in private artifact storage. This page
   reports only reviewed software-verification metadata.
-- No private behavioral study has been run, and no concept/circuit discovery is claimed.
+- No controlled behavioral study has been run, and no concept/circuit discovery is claimed.
 
 ## Checkpoint inventory
 

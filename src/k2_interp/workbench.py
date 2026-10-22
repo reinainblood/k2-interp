@@ -88,6 +88,8 @@ def create_workbench(
         if len(recent) >= 10:
             raise HTTPException(429, "Login rate limit")
         body = await request.json()
+        if not isinstance(body, dict):
+            raise HTTPException(422, "Expected login object")
         if not auth.redeem(body.get("ticket")):
             raise HTTPException(401, "Expired or invalid access ticket")
         response = JSONResponse({"authenticated": True})
@@ -170,7 +172,9 @@ def create_workbench(
     def send(session_id: str, body: NewTurn):
         if not body.text.strip() or body.generation.max_new_tokens < 1:
             raise HTTPException(422, "Empty turn")
-        if any(layer < 0 or layer > 60 for layer in body.layers):
+        if any(layer < 0 or layer > 60 for layer in body.layers) or len(set(body.layers)) != len(
+            body.layers
+        ):
             raise HTTPException(422, "Layer outside model")
         with store.lock:
             session = session_or_404(session_id)

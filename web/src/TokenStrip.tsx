@@ -16,6 +16,7 @@ export function TokenStrip({
   onFollow: () => void;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const [windowStart, setWindowStart] = useState(0);
   const [query, setQuery] = useState("");
   const tokens = frame?.token_text || [];
@@ -24,7 +25,14 @@ export function TokenStrip({
     if (follow) setWindowStart(Math.max(0, selected - 90));
   }, [selected, follow]);
   useEffect(() => {
-    ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+    const list = listRef.current,
+      token = ref.current;
+    if (list && token) {
+      const delta =
+        token.getBoundingClientRect().top - list.getBoundingClientRect().top;
+      if (delta < 0 || delta + token.offsetHeight > list.clientHeight)
+        list.scrollTop += delta - 24;
+    }
   }, [selected]);
   const start = Math.min(windowStart, Math.max(0, tokens.length - 1));
   const matches = query
@@ -104,7 +112,11 @@ export function TokenStrip({
           Next
         </button>
       </div>
-      <div className="token-list" aria-label="Captured input token positions">
+      <div
+        className="token-list"
+        ref={listRef}
+        aria-label="Captured input token positions"
+      >
         {!tokens.length && <span className="empty-inline">No capture</span>}
         {start > 0 && (
           <button

@@ -106,6 +106,16 @@ def test_capture_rejects_corrupt_shard(traced):
         inspect_token(root, "sft_3_1500", "trace", 0)
 
 
+def test_recovered_projection_checks_result_hash(traced):
+    root, _, _ = traced
+    target = next(root.glob("sft_3_1500/trace/samples/chat/attempt-*/result.json"))
+    value = json.loads(target.read_text())
+    value["assistant_message"]["content"] = "tampered"
+    target.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match="Unverified"):
+        latest_projection(root, "sft_3_1500", "trace")
+
+
 def test_cancellation_and_hook_cleanup(tmp_path, native_model, tokenizer):
     runtime = Runtime(native_model, tokenizer, {"checkpoint": "test"}, tmp_path)
     with LiveTelemetry("cancel", lambda _: None) as telemetry:

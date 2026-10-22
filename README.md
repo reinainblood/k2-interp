@@ -16,6 +16,11 @@ The runtime is experiment-agnostic. Prompts, chats, traces, trained dictionaries
 and private study results stay outside Git. Examples use public factual questions.
 No scientific finding is implied by a successful software test.
 
+[The private web workbench](docs/workbench.md) connects multi-turn chat and editable
+system/reasoning controls to live routing, expert-output, residual, and token views.
+Select a token to inspect its captured state, download a timestamped numeric/SVG
+capture, or export the complete conversation including native reasoning.
+
 New to the project? Start with [deploying the checkpoints](docs/deployment.md), which
 separates IFM's upstream guidance from this instrumented runtime. Before collecting
 data, read [storage, exports, and recovery](docs/data-safety.md): full-chat exports

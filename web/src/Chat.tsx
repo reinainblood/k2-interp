@@ -44,12 +44,14 @@ export function Chat({
   const [error, setError] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
   const bottom = useRef<HTMLDivElement>(null);
+  const scrollPane = useRef<HTMLDivElement>(null);
   const active =
     session?.turns.some((t) => !terminal(t.status)) ||
     (frame && !terminal(frame.status)) ||
     sending;
   useEffect(() => {
-    if (autoScroll) bottom.current?.scrollIntoView({ block: "nearest" });
+    if (autoScroll && scrollPane.current)
+      scrollPane.current.scrollTop = scrollPane.current.scrollHeight;
   }, [frame?.output_ids?.length, session?.turns.length, autoScroll]);
   async function submit() {
     if (!text.trim() || active || !session) return;
@@ -101,7 +103,7 @@ export function Chat({
           Scroll
         </button>
       </div>
-      <div className="chat-scroll">
+      <div className="chat-scroll" ref={scrollPane}>
         {session?.turns.map((turn, i) => {
           const live = turn.run_id === frame?.run_id ? frame : null;
           const message =

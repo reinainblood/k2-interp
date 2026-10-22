@@ -13,7 +13,7 @@ from safetensors import safe_open
 from .artifacts import file_hash
 from .capture_svg import router_svg
 from .conversation_export import collect_conversation, conversation_markdown
-from .schema import identifier
+from .schema import digest, identifier
 from .telemetry import project_layer, utc_now
 
 
@@ -23,7 +23,14 @@ def read_json(path):
 
 def trace_attempt(root: Path, checkpoint: str, run_id: str):
     run = root / identifier(checkpoint) / identifier(run_id)
+    if not run.resolve().is_relative_to(root.resolve()):
+        raise ValueError("Trace path escapes artifact root")
     manifest = read_json(run / "manifest.json")
+    if (
+        digest({"spec": manifest["spec"], "identity": manifest["identity"]})
+        != manifest["request_sha256"]
+    ):
+        raise ValueError("Run manifest hash mismatch")
     base = run / "samples" / "chat"
     if (base / "complete.json").exists():
         receipt = read_json(base / "complete.json")
@@ -111,6 +118,7 @@ def latest_projection(root, checkpoint, run_id):
     verified(run, paths[-1], files)
     state = read_json(paths[-1])
     if complete:
+        verified(run, attempt / "result.json", files)
         result = read_json(attempt / "result.json")
         state.update(
             status="complete",

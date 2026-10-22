@@ -30,14 +30,27 @@ export default function App() {
   const [system, setSystem] = useState("");
   const [ticket, setTicket] = useState("");
   const dialog = useRef<HTMLDialogElement>(null);
+  const pendingSelection = useRef<{
+    runId: string;
+    position: number;
+    layer: number;
+  } | null>(null);
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem("k2-theme", theme);
   }, [theme]);
   useEffect(() => {
-    setFollow(true);
+    const saved = pendingSelection.current;
+    if (saved?.runId === w.runId) {
+      setFollow(false);
+      setPosition(saved.position);
+      setLayer(saved.layer);
+      pendingSelection.current = null;
+    } else {
+      setFollow(true);
+      setPosition(0);
+    }
     setInspection(null);
-    setPosition(0);
   }, [w.runId]);
   useEffect(() => {
     if (follow && w.frame?.position != null) setPosition(w.frame.position);
@@ -327,9 +340,17 @@ export default function App() {
                     <div className="capture-entry" key={c.capture_id}>
                       <button
                         onClick={() => {
-                          w.setRunId(c.run_id);
-                          setTimeout(() => choose(c.position), 0);
-                          setLayer(c.layer);
+                          if (w.runId === c.run_id) {
+                            choose(c.position);
+                            setLayer(c.layer);
+                          } else {
+                            pendingSelection.current = {
+                              runId: c.run_id,
+                              position: c.position,
+                              layer: c.layer,
+                            };
+                            w.setRunId(c.run_id);
+                          }
                         }}
                       >
                         {c.tag || `p${c.position} / L${c.layer}`}
