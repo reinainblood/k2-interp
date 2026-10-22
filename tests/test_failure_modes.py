@@ -134,3 +134,20 @@ def test_example_schema():
         json.loads((Path(__file__).parents[1] / "examples/capture.json").read_text())
     )
     assert spec.samples[0].continuation
+
+
+def test_prompt_family_cannot_cross_train_validation(tmp_path):
+    writer = TraceWriter(tmp_path, {"run_id": "leaky"}, {"checkpoint": "fixture"})
+    for i, split in enumerate(("train", "validation")):
+        sample = Sample(id=f"s{i}", input_ids=[2, 3], split=split, template_group="same-family")
+        sink = writer.sample(sample.id, 10000)
+        sink.record(
+            0, {"positions": [0, 1], "layer": 1}, {"layers.1.resid_post": torch.randn(2, 8)}
+        )
+        sink.finish({"sample": sample.model_dump(), "all_token_ids": [2, 3]})
+    views = [
+        {"name": role, "role": role, "run": str(tmp_path / "leaky"), "site": "layers.1.resid_post"}
+        for role in ("input", "target")
+    ]
+    with pytest.raises(ValueError, match="leaks across splits"):
+        build_dataset(views, tmp_path / "dataset")

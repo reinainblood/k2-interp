@@ -41,7 +41,12 @@ def test_capture_preserves_logits_and_removes_hooks(native_model, tmp_path):
     sink = writer.sample("x", 1000000)
     with NativeTrace(
         native_model,
-        CaptureSpec(layers=[1, 2], sites=["moe_in", "moe_out", "resid_post"], expert_outputs=True),
+        CaptureSpec(
+            layers=[1, 2],
+            sites=["moe_in", "moe_out", "resid_post", "shared_out"],
+            expert_outputs=True,
+            tensor_dtype="float32",
+        ),
         sink,
     ) as trace:
         trace.begin([0, 1, 2], step=0, phase="prefill")
@@ -55,6 +60,9 @@ def test_capture_preserves_logits_and_removes_hooks(native_model, tmp_path):
     assert any("layers.1.moe_in" in t for _, _, t in records)
     weighted = sum(t[k] for _, _, t in records for k in t if k.startswith("layers.1.expert."))
     assert weighted.shape == (3, 16)
+    shared = next(t["layers.1.shared_out"] for _, _, t in records if "layers.1.shared_out" in t)
+    output = next(t["layers.1.moe_out"] for _, _, t in records if "layers.1.moe_out" in t)
+    torch.testing.assert_close(weighted + shared, output, rtol=0, atol=1e-7)
 
 
 def test_patch_effect_cleanup_and_validation(native_model):
