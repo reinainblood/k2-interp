@@ -22,6 +22,12 @@ and completed sample. Resume validates hashes and skips only completed samples.
 An interrupted sample starts a new attempt; partial attempts remain available.
 Generation does not resume halfway through a KV cache.
 
+All layer/site records for one forward are packed into one safetensors shard and
+one JSON sidecar, with per-record layer/position metadata. This avoids creating
+thousands of files per response. `iter_records` exposes the same logical records
+for packed shards and the earlier one-record-per-shard format. Capture byte limits
+are enforced while buffering, before serialization; each completed forward is flushed.
+
 ## Token alignment
 
 Each row records the token **being processed** at absolute position `i`, which

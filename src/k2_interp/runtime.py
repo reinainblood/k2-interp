@@ -168,6 +168,7 @@ class Runtime:
                 generator = torch.Generator(device=logits.device).manual_seed(generation.seed)
             if trace.sink:
                 # Per-forward persistence also survives interruption during a long response.
+                trace.flush()
                 trace.sink.checkpoint()
             if len(generated) == extra or (generated and not continuation and generated[-1] in eos):
                 break

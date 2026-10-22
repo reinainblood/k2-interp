@@ -36,6 +36,9 @@ class NativeTrace(AbstractContextManager):
         self.effective_routes = {}
         self.applied = set()
         self.applied_positions = [set() for _ in self.interventions]
+        self.pending_tensors = {}
+        self.pending_records = []
+        self.pending_bytes = 0
         self.layers = model.model.layers
         wanted = spec.layers + [p.layer for p in self.interventions]
         if any(i >= len(self.layers) for i in wanted):
@@ -54,6 +57,7 @@ class NativeTrace(AbstractContextManager):
                     raise ValueError("Expert-id replacement tensors must have integer dtype")
 
     def begin(self, positions: list[int], *, step: int, phase: str) -> None:
+        self.flush()
         self.positions, self.step, self.phase = positions, step, phase
         self.routes.clear()
         self.effective_routes.clear()
@@ -90,11 +94,38 @@ class NativeTrace(AbstractContextManager):
             return
         positions = [self.positions[i] for i in selected]
         values["positions"] = torch.tensor(positions, dtype=torch.int64)
-        self.sink.record(
-            self.step,
-            {"step": self.step, "phase": self.phase, "layer": layer, "positions": positions},
-            values,
+        keys = []
+        for key, value in values.items():
+            if key in self.pending_tensors:
+                if key == "positions" and torch.equal(self.pending_tensors[key], value.cpu()):
+                    continue
+                raise ValueError("Duplicate capture key; call begin() for each model forward")
+            added = value.numel() * value.element_size()
+            if self.sink.bytes + self.pending_bytes + added > self.spec.max_bytes:
+                raise ValueError("Capture byte budget exceeded")
+            self.pending_tensors[key] = value.detach().cpu().contiguous().clone()
+            self.pending_bytes += added
+            keys.append(key)
+        self.pending_records.append(
+            {
+                "step": self.step,
+                "phase": self.phase,
+                "layer": layer,
+                "positions": positions,
+                "keys": keys,
+            }
         )
+
+    def flush(self):
+        if self.pending_tensors:
+            self.sink.record(
+                self.step,
+                {"step": self.step, "phase": self.phase, "records": self.pending_records},
+                self.pending_tensors,
+            )
+            self.pending_tensors = {}
+            self.pending_records = []
+            self.pending_bytes = 0
 
     def edit(self, layer: int, site: str, tensor: torch.Tensor) -> torch.Tensor:
         result = tensor
@@ -253,4 +284,9 @@ class NativeTrace(AbstractContextManager):
         self.originals.clear()
         self.routes.clear()
         self.effective_routes.clear()
+        if not args or args[0] is None:
+            self.flush()
+        self.pending_tensors.clear()
+        self.pending_records.clear()
+        self.pending_bytes = 0
         return False

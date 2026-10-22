@@ -163,4 +163,9 @@ def iter_records(run: str | Path, sample_id: str | None = None, fields: set[str]
                     tensors = {
                         k: f.get_tensor(k) for k in f.keys() if fields is None or k in fields
                     }
-                yield path.parent.name, meta, tensors
+                for record in meta.get("records", [meta]):
+                    keys = set(record.get("keys", tensors)) | {"positions"}
+                    selected = {k: v for k, v in tensors.items() if k in keys}
+                    if fields is not None and not fields.intersection(selected):
+                        continue
+                    yield path.parent.name, record, selected

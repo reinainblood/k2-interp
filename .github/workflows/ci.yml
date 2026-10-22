@@ -12,8 +12,8 @@ jobs:
         with:
           enable-cache: true
       - run: uv sync --python 3.11 --extra dev --extra modal
-      - run: uv run ruff check src tests
-      - run: uv run ruff format --check src tests
+      - run: uv run ruff check src tests scripts
+      - run: uv run ruff format --check src tests scripts
       - run: uv run pytest -q
       - run: uv build
       - run: uv run k2-interp checkpoints

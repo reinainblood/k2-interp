@@ -50,6 +50,7 @@ def test_capture_preserves_logits_and_removes_hooks(native_model, tmp_path):
     torch.testing.assert_close(baseline, observed, rtol=0, atol=0)
     assert not any(m._forward_hooks or m._forward_pre_hooks for m in native_model.modules())
     records = list(iter_records(tmp_path / "r"))
+    assert len(list((tmp_path / "r").rglob("*.safetensors"))) == 1
     assert any("layers.1.router_logits" in t for _, _, t in records)
     assert any("layers.1.moe_in" in t for _, _, t in records)
     weighted = sum(t[k] for _, _, t in records for k in t if k.startswith("layers.1.expert."))
