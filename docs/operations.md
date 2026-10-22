@@ -1,5 +1,11 @@
 # Operations
 
+Request schemas can be exported with `k2-interp schema run` (also `sample`, `capture`,
+`intervention`, `chat`, and `training`). Run wall-time budgets are checked between
+model forwards; Modal's function timeout is the outer limit. A long forward can
+finish after the inner deadline. Account for startup and the configured idle window
+when estimating billable node time.
+
 Every new resource is explicitly scoped to Modal `FDR`. Each checkpoint app has one
 maximum model worker, CPU preparation and analysis functions, an A100-80GB training
 function, and a protected HTTP API. Deploying all apps does not load all weights;

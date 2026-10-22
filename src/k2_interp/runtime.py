@@ -131,7 +131,7 @@ class Runtime:
             )
         if max(prompt + continuation) >= self.model.config.vocab_size:
             raise ValueError("Input token exceeds vocabulary")
-        generator = torch.Generator(device=self.device).manual_seed(generation.seed)
+        generator = None
         eos = self.model.generation_config.eos_token_id
         eos = {eos} if isinstance(eos, int) else set(eos or [])
         all_ids, generated, scores = list(prompt), [], []
@@ -157,6 +157,8 @@ class Runtime:
             )
             cached = out.past_key_values
             logits = out.logits[0, -1].float()
+            if generator is None:
+                generator = torch.Generator(device=logits.device).manual_seed(generation.seed)
             if trace.sink:
                 # Per-forward persistence also survives interruption during a long response.
                 trace.sink.checkpoint()

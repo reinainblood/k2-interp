@@ -99,6 +99,20 @@ def full_model_smoke(runtime, run_id):
         raise ValueError("Identity intervention changed scores")
     if abs(causal["interventions"][1]["delta_sum_logprob"]) < 1e-6:
         raise ValueError("Ablation did not change target score")
+    generated = []
+    for _repeat in range(2):
+        with NativeTrace(runtime.model, CaptureSpec(router=False)) as trace:
+            generated.append(
+                runtime.execute(
+                    Sample(id="generation", text="One, two, three,"),
+                    GenerationSpec(max_new_tokens=2, temperature=0.7, seed=19),
+                    trace,
+                    256,
+                    time.monotonic() + 600,
+                )
+            )
+    if generated[0]["output_ids"] != generated[1]["output_ids"]:
+        raise ValueError("Seeded generation did not replay")
     report = {
         "status": "passed",
         "model": runtime.identity,
@@ -109,6 +123,7 @@ def full_model_smoke(runtime, run_id):
         "identity_intervention_passed": True,
         "ablation_delta": causal["interventions"][1]["delta_sum_logprob"],
         "intervention_cleanup_passed": causal["cleanup_identity_passed"],
+        "seeded_generation_passed": True,
         "elapsed_test_seconds": time.monotonic() - started,
         "trace_path": receipt["path"],
         "scope": "runtime verification; not a scientific study result",

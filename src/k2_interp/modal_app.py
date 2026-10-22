@@ -282,7 +282,7 @@ def api():
             ],
         }
 
-    @web.post("/runs")
+    @web.post("/runs", status_code=202)
     async def run(request: RunSpec):
         if request.checkpoint != CHECKPOINT:
             raise HTTPException(400, "Checkpoint does not match this deployment")

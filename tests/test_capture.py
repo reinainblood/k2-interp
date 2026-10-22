@@ -113,3 +113,17 @@ def test_reject_overlong_and_expired(native_model, tokenizer, tmp_path):
             )
         with pytest.raises(TimeoutError):
             runtime.execute(Sample(id="s", input_ids=[2, 3]), GenerationSpec(), trace, 100, 0)
+
+
+def test_greedy_generation_matches_upstream(native_model, tokenizer, tmp_path):
+    runtime = Runtime(native_model, tokenizer, {"checkpoint": "test"}, tmp_path)
+    with NativeTrace(native_model, CaptureSpec(router=False)) as trace:
+        result = runtime.execute(
+            Sample(id="s", input_ids=[4, 5, 6]),
+            GenerationSpec(max_new_tokens=3),
+            trace,
+            100,
+            time.monotonic() + 10,
+        )
+    expected = native_model.generate(torch.tensor([[4, 5, 6]]), max_new_tokens=3, do_sample=False)
+    assert result["output_ids"] == expected[0, 3:].tolist()

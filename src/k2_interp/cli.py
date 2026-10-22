@@ -41,6 +41,10 @@ def parser():
     p = argparse.ArgumentParser(prog="k2-interp", description=__doc__)
     sub = p.add_subparsers(dest="command", required=True)
     sub.add_parser("checkpoints", help="List pinned checkpoint commits; no network or GPU")
+    schema = sub.add_parser("schema", help="Print JSON schema for a request contract")
+    schema.add_argument(
+        "kind", choices=["run", "sample", "capture", "intervention", "chat", "training"]
+    )
     lock = sub.add_parser("lock", help="Resolve current Hub metadata at pinned commits")
     lock.add_argument("--checkpoint", choices=CHECKPOINTS, default="sft_3_1500")
     lock.add_argument("--output", required=True)
@@ -140,6 +144,20 @@ def main(argv=None):
     args = parser().parse_args(argv)
     if args.command == "checkpoints":
         emit(CHECKPOINTS)
+    elif args.command == "schema":
+        from .dictionary import TrainingConfig
+        from .schema import CaptureSpec, ChatRequest, Intervention, Sample
+
+        emit(
+            {
+                "run": RunSpec,
+                "sample": Sample,
+                "capture": CaptureSpec,
+                "intervention": Intervention,
+                "chat": ChatRequest,
+                "training": TrainingConfig,
+            }[args.kind].model_json_schema()
+        )
     elif args.command == "lock":
         lock = resolve(args.checkpoint)
         atomic_json(Path(args.output), lock)
