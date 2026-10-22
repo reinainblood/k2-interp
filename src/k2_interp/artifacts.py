@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import os
@@ -87,6 +88,7 @@ class SampleWriter:
         self.bytes = 0
         self.files: dict[str, str] = {}
         self.shards = 0
+        self.generation_progress = None
 
     def record(self, step: int, metadata: dict, tensors: dict[str, torch.Tensor]) -> None:
         # Copy before the model reuses storage. Shape/dtype are preserved, including BF16.
@@ -114,8 +116,13 @@ class SampleWriter:
             self.files[str(p.relative_to(self.parent.root))] = file_hash(p)
         self.bytes += added
 
-    def checkpoint(self) -> None:
-        atomic_json(self.path / "progress.json", {"files": self.files, "bytes": self.bytes})
+    def checkpoint(self, progress: dict | None = None) -> None:
+        if progress is not None:
+            self.generation_progress = copy.deepcopy(progress)
+        atomic_json(
+            self.path / "progress.json",
+            {"files": self.files, "bytes": self.bytes, "generation": self.generation_progress},
+        )
         self.parent.commit()
 
     def finish(self, result: dict) -> dict:

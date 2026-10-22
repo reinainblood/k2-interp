@@ -30,6 +30,7 @@ class NativeTrace(AbstractContextManager):
         self.transforms = transforms or {}
         self.handles, self.originals = [], []
         self.positions = []
+        self.token_ids = None
         self.step = 0
         self.phase = "prefill"
         self.routes = {}
@@ -56,8 +57,13 @@ class NativeTrace(AbstractContextManager):
                 if patch.site == "expert_ids" and value.is_floating_point():
                     raise ValueError("Expert-id replacement tensors must have integer dtype")
 
-    def begin(self, positions: list[int], *, step: int, phase: str) -> None:
+    def begin(
+        self, positions: list[int], *, step: int, phase: str, token_ids: list[int] | None = None
+    ) -> None:
         self.flush()
+        if token_ids is not None and len(token_ids) != len(positions):
+            raise ValueError("Token IDs and capture positions differ in length")
+        self.token_ids = token_ids
         self.positions, self.step, self.phase = positions, step, phase
         self.routes.clear()
         self.effective_routes.clear()
@@ -112,6 +118,9 @@ class NativeTrace(AbstractContextManager):
                 "phase": self.phase,
                 "layer": layer,
                 "positions": positions,
+                "token_ids": [self.token_ids[i] for i in selected]
+                if self.token_ids is not None
+                else None,
                 "keys": keys,
             }
         )

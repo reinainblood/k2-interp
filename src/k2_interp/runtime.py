@@ -156,7 +156,12 @@ class Runtime:
             if time.monotonic() >= deadline:
                 raise TimeoutError("Run wall-time limit reached; partial trace retained")
             phase = "prefill" if step == 0 else ("teacher_forced" if continuation else "decode")
-            trace.begin(list(range(start, start + len(forward_ids))), step=step, phase=phase)
+            trace.begin(
+                list(range(start, start + len(forward_ids))),
+                step=step,
+                phase=phase,
+                token_ids=forward_ids,
+            )
             x = torch.tensor([forward_ids], device=self.device)
             mask = torch.ones((1, len(all_ids)), dtype=torch.long, device=self.device)
             out = self.model(
@@ -174,7 +179,17 @@ class Runtime:
             if trace.sink:
                 # Per-forward persistence also survives interruption during a long response.
                 trace.flush()
-                trace.sink.checkpoint()
+                trace.sink.checkpoint(
+                    {
+                        "input_ids": prompt,
+                        "output_ids": generated,
+                        "all_token_ids": all_ids,
+                        "output_logprobs": scores,
+                        "processed_tokens": len(all_ids),
+                        "step": step,
+                        "phase": phase,
+                    }
+                )
             if len(generated) == extra or (generated and not continuation and generated[-1] in eos):
                 break
             next_token = (

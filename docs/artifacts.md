@@ -21,6 +21,10 @@ and result metadata are written. The Modal Volume commits after each forward pas
 and completed sample. Resume validates hashes and skips only completed samples.
 An interrupted sample starts a new attempt; partial attempts remain available.
 Generation does not resume halfway through a KV cache.
+Each committed progress checkpoint also retains the processed input/output token
+IDs and their output log probabilities. Partial captures remain interpretable even
+if the response never reaches a final result file; unprocessed sampled tokens are
+not claimed as captured. Per-record metadata carries the exact input token IDs.
 
 All layer/site records for one forward are packed into one safetensors shard and
 one JSON sidecar, with per-record layer/position metadata. This avoids creating
