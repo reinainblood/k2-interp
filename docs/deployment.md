@@ -37,11 +37,12 @@ this runtime's latency or numerical behavior to IFM's optimized recipe. The
 
 ## Choose a checkpoint
 
-The current registry covers eleven named releases, not every intermediate
+The current registry covers twelve named releases, not every intermediate
 checkpoint IFM has published:
 
 | Registry name | Comparison role |
 | --- | --- |
+| `pretrain_ph2_240000` | Final pretraining checkpoint; no chat template behavior was trained, so it is a base-model baseline for teacher-forced comparisons |
 | `mid_3_3500` | Earlier context-extended checkpoint |
 | `mid_4_6000` | Final midtraining checkpoint |
 | `rl_knowledge_work` | Knowledge-work RL specialist |
@@ -59,8 +60,13 @@ The lineage is Mid3 → Mid4 → five RL specialists → merged RL → SFT1 → 
 data, so calling it an entirely SFT-data-free baseline would be misleading.
 [IFM training overview](https://huggingface.co/IFM/K2-Horizon-375B-A23B#training-overview).
 
-The live Hub refs were checked on October 22, 2026: all eleven named refs matched
-the commits in [`registry.py`](../src/k2_interp/registry.py). The Hub API returned
+The live Hub refs were checked on October 22, 2026: all eleven post-training refs
+matched the commits in [`registry.py`](../src/k2_interp/registry.py), and
+`pretrain_ph2_240000` was added the same day with its tag commit and the same
+61-shard, 6144-hidden, 192-expert geometry confirmed from Hub metadata. `main`
+was weight-identical to `sft_3_1500` on all 61 shards that day; it differs only in
+README, assets, and a `chat_template.jinja` revision that normalizes list-of-text
+message content and renders string content identically. The Hub API returned
 these names as tags, although the model card calls its inventory entries branches.
 Both are revision selectors; this project uses the immutable commit underneath.
 Never resolve a wildcard such as `sft_3_*` as if it were a real checkpoint name.

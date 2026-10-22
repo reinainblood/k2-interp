@@ -56,7 +56,7 @@ The lock uses PyTorch 2.13.0 and Transformers 5.13.0. Tests download the pinned 
 model source/config and instantiate random, reduced-size models with that exact
 implementation. Full 375B weights are required for scientific conclusions.
 
-## Deploy one checkpoint or all eleven
+## Deploy one checkpoint or all twelve
 
 Configure Modal credentials first. Every operation explicitly uses `FDR`.
 
@@ -117,6 +117,22 @@ ends the client; the worker follows its idle policy. The HTTP API uses Modal pro
 authentication and supports non-streaming `/v1/chat/completions` plus asynchronous
 `/runs` requests. SDK calls use existing Modal credentials.
 
+## Harbor: agentic trajectories, then replay
+
+k2-interp can be the model behind a [Harbor](https://docs.harborframework.com/) agent
+and can turn the resulting job into teacher-forced capture requests on any checkpoint.
+Behavior is collected once; internals are captured on exactly the tokens produced.
+
+```sh
+harbor run -p tasks -a k2_interp.harbor:K2Agent --ak checkpoint=sft_3_1500 --jobs-dir results --job-name a0
+uv run k2-interp harbor-summary results/a0
+uv run k2-interp harbor-replay results/a0 --stage b1 --checkpoints spine --run-prefix a0 --output specs/b1
+uv run k2-interp router-features artifacts/a0-b1-all --output features/a0-b1
+```
+
+See [the Harbor guide](docs/harbor.md) for the text tool protocol, the trace files
+written per trial, the three capture stages, and the outcome labels.
+
 ## The analysis pipeline
 
 1. `run` captures router data at all sparse layers and selected residual/MLP sites.
@@ -149,8 +165,8 @@ latent 0 and token 0 have no preassigned semantic meaning.
 
 ## Checkpoints and reproducibility
 
-The pinned registry contains Mid3, Mid4, all five RL specialists, merged RL, and
-SFT1/2/3. Immutable commits, all LFS weight hashes, tokenizer/config/source hashes,
+The pinned registry contains the final pretraining checkpoint, Mid3, Mid4, all five
+RL specialists, merged RL, and SFT1/2/3. Immutable commits, all LFS weight hashes, tokenizer/config/source hashes,
 runtime source hash, and dependency versions travel with each run.
 
 IFM documents Mid4 → RL specialists → merged RL → SFT1 → SFT2 → SFT3. Mid4 already

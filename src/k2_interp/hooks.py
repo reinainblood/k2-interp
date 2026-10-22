@@ -224,6 +224,8 @@ class NativeTrace(AbstractContextManager):
                 routes = self.effective_routes.get(layer)
                 if routes is None:
                     routes = route(result[1], block)
+                if self.spec.router_fields is not None:
+                    routes = {k: v for k, v in routes.items() if k in self.spec.router_fields}
                 batch, length = args[0].shape[:2]
                 self.emit(
                     layer, {k: v.reshape(batch, length, *v.shape[1:]) for k, v in routes.items()}

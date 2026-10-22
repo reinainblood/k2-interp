@@ -47,6 +47,22 @@ def test_api_schema_rejects_ignored_sampling_and_checkpoint(monkeypatch):
     assert response.status_code == 200
     assert requests[0]["temperature"] == 0.7 and requests[0]["top_p"] == 0.8
     assert response.json()["choices"][0]["message"]["reasoning_content"] == "brief reasoning"
+    # Token identity travels with every turn so clients can freeze trajectories.
+    block = response.json()["k2_interp"]
+    assert block["input_ids"] == [2, 3] and block["output_ids"] == [4]
+    assert block["captured"] is False and "capture" not in requests[0]
+    captured = client.post(
+        "/v1/chat/completions",
+        json={**payload, "capture": {"router": True, "router_fields": ["expert_ids"], "sites": []}},
+    )
+    assert captured.status_code == 200 and captured.json()["k2_interp"]["captured"] is True
+    assert requests[1]["capture"]["router_fields"] == ["expert_ids"]
+    assert (
+        client.post(
+            "/v1/chat/completions", json={**payload, "capture": {"router_fields": ["bogus"]}}
+        ).status_code
+        == 422
+    )
     assert (
         client.post("/v1/chat/completions", json={**payload, "logit_bias": {"5": 100}}).status_code
         == 422
