@@ -56,7 +56,10 @@ export default function App() {
     if (follow && w.frame?.position != null) setPosition(w.frame.position);
   }, [w.frame?.position, follow]);
   useEffect(() => {
-    if (follow || !w.session || !w.runId) return;
+    if (follow || !w.session || !w.runId) {
+      setInspectBusy(false);
+      return;
+    }
     const controller = new AbortController();
     setInspectBusy(true);
     setInspection(null);
