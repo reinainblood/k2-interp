@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import concurrent.futures
 import json
+import math
 import os
+import re
+import struct
 from pathlib import Path
 
 from huggingface_hub import hf_hub_download
@@ -106,13 +109,15 @@ def native_load(checkpoint: str, root: str | Path):
     # Layers stay whole. This is sequential model parallelism, not TP/EP.
     # Avoid automatic CPU offload or silently loading a quantized fallback.
     memory = {i: int(torch.cuda.get_device_properties(i).total_memory * 0.88) for i in range(8)}
+    device_map, placement = plan_placement(path, memory)
+    print(json.dumps({"event": "placement_validated", "bytes_per_gpu": placement}), flush=True)
     tokenizer = AutoTokenizer.from_pretrained(path, trust_remote_code=True, local_files_only=True)
     model = AutoModelForCausalLM.from_pretrained(
         path,
         trust_remote_code=True,
         local_files_only=True,
         dtype=torch.bfloat16,
-        device_map="balanced",
+        device_map=device_map,
         max_memory=memory,
         low_cpu_mem_usage=True,
         attn_implementation="sdpa",
@@ -130,7 +135,53 @@ def native_load(checkpoint: str, root: str | Path):
         "attention": "sdpa",
         "parallelism": "native-whole-layer-model-parallel",
         "devices": {str(k): str(v) for k, v in model.hf_device_map.items()},
+        "planned_weight_bytes_per_gpu": placement,
         "gpus": [torch.cuda.get_device_name(i) for i in range(8)],
         "code_revision": os.environ.get("K2_INTERP_CODE_REVISION", "unrecorded"),
     }
     return model, tokenizer, identity
+
+
+def plan_placement(path: str | Path, memory: dict[int, int]) -> tuple[dict, dict]:
+    """Place complete K2 blocks from safetensors headers before allocating weights."""
+    path = Path(path)
+    config = json.loads((path / "config.json").read_text())
+    index = json.loads((path / "model.safetensors.index.json").read_text())["weight_map"]
+    sizes = {}
+    for shard in sorted(set(index.values())):
+        with (path / shard).open("rb") as f:
+            length = struct.unpack("<Q", f.read(8))[0]
+            if length > 100_000_000:
+                raise ValueError("Invalid safetensors header length")
+            header = json.loads(f.read(length))
+        for name, tensor in header.items():
+            if name == "__metadata__":
+                continue
+            if tensor["dtype"] not in ("BF16", "F16", "F32"):
+                raise ValueError(f"Unexpected weight dtype {tensor['dtype']} in {name}")
+            sizes[name] = math.prod(tensor["shape"]) * 2
+    if set(sizes) != set(index):
+        raise ValueError("Weight index/header tensor names disagree")
+    layers = [0] * config["num_hidden_layers"]
+    for name, size in sizes.items():
+        if match := re.match(r"model\.layers\.(\d+)\.", name):
+            layers[int(match[1])] += size
+        elif name not in ("model.embed_tokens.weight", "model.norm.weight", "lm_head.weight"):
+            raise ValueError(f"Unrecognized top-level parameter: {name}")
+    if len(memory) != 8 or set(memory) != set(range(8)):
+        raise ValueError("Placement requires eight enumerated GPU capacities")
+    total = sum(sizes.values())
+    cursor = sizes["model.embed_tokens.weight"]
+    placement = {i: 0 for i in range(8)}
+    placement[0] = cursor
+    placement[7] = sizes["model.norm.weight"] + sizes["lm_head.weight"]
+    mapping = {"model.embed_tokens": 0, "model.rotary_emb": 0, "model.norm": 7, "lm_head": 7}
+    for layer, size in enumerate(layers):
+        gpu = min(7, int((cursor + size / 2) / (total / 8)))
+        mapping[f"model.layers.{layer}"] = gpu
+        placement[gpu] += size
+        cursor += size
+    for gpu, size in placement.items():
+        if size > memory[gpu]:
+            raise MemoryError(f"GPU {gpu} needs {size} weight bytes; budget is {memory[gpu]}")
+    return mapping, placement

@@ -92,15 +92,17 @@ def prepare_checkpoint(reuse_subdir: str = ""):
     },
 )
 def preflight():
-    from k2_interp.weights import ready
+    from k2_interp.weights import plan_placement, ready
 
     path, lock = ready(CHECKPOINT, "/weights")
+    _, placement = plan_placement(path, {i: 128_000_000_000 for i in range(8)})
     return {
         "checkpoint": CHECKPOINT,
         "revision": lock["revision"],
         "ready": True,
         "path": str(path),
         "weight_manifest_sha256": lock["weight_manifest_sha256"],
+        "planned_weight_bytes_per_gpu": placement,
     }
 
 
@@ -124,7 +126,14 @@ def preflight():
 )
 class NativeWorker:
     @modal.enter()
-    def load(self):
+    def initialize(self):
+        # Loading inside a method makes failures belong to that request. Modal can
+        # retry failing lifecycle hooks even when function retries are disabled.
+        self.runtime = None
+
+    def ensure_loaded(self):
+        if self.runtime is not None:
+            return
         from k2_interp.runtime import Runtime
         from k2_interp.weights import native_load
 
@@ -137,16 +146,19 @@ class NativeWorker:
     def run(self, request: dict):
         from k2_interp.schema import RunSpec
 
+        self.ensure_loaded()
         artifacts.reload()
         return self.runtime.run(RunSpec.model_validate(request))
 
     @modal.method()
     def chat(self, request: dict):
+        self.ensure_loaded()
         artifacts.reload()
         return self.runtime.chat(**request)
 
     @modal.method()
     def intervene(self, request: dict):
+        self.ensure_loaded()
         from k2_interp.causal import intervention_sweep
 
         artifacts.reload()
@@ -154,6 +166,7 @@ class NativeWorker:
 
     @modal.method()
     def graph(self, request: dict):
+        self.ensure_loaded()
         from k2_interp.causal import feature_graph
 
         artifacts.reload()
@@ -161,6 +174,7 @@ class NativeWorker:
 
     @modal.method()
     def attribute(self, request: dict):
+        self.ensure_loaded()
         from k2_interp.causal import attribute_features
 
         artifacts.reload()
@@ -168,6 +182,7 @@ class NativeWorker:
 
     @modal.method()
     def fidelity(self, request: dict):
+        self.ensure_loaded()
         from k2_interp.causal import reconstruction_fidelity
 
         artifacts.reload()
@@ -175,6 +190,7 @@ class NativeWorker:
 
     @modal.method()
     def smoke(self, run_id: str):
+        self.ensure_loaded()
         from k2_interp.validation import full_model_smoke
 
         return full_model_smoke(self.runtime, run_id)
