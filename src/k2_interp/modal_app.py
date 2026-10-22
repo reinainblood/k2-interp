@@ -158,6 +158,29 @@ class NativeWorker:
         return self.runtime.chat(**request)
 
     @modal.method()
+    def live_chat(self, request: dict):
+        from k2_interp.schema import CaptureSpec
+        from k2_interp.telemetry import LiveTelemetry
+
+        channel = modal.Dict.from_name("k2-interp-live", environment_name=ENVIRONMENT)
+        run_id = request["run_id"]
+        with LiveTelemetry(
+            run_id,
+            lambda value: channel.put("live:" + run_id, value),
+            lambda: bool(channel.get("cancel:" + run_id, False)),
+        ) as telemetry:
+            try:
+                self.ensure_loaded()
+                artifacts.reload()
+                request = {**request, "capture": CaptureSpec.model_validate(request["capture"])}
+                result = self.runtime.chat(**request, telemetry=telemetry)
+                telemetry.finish(result)
+                return result
+            except Exception as exc:
+                telemetry.fail(exc)
+                raise
+
+    @modal.method()
     def intervene(self, request: dict):
         self.ensure_loaded()
         from k2_interp.causal import intervention_sweep

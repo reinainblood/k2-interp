@@ -36,6 +36,8 @@ class CaptureSpec(Contract):
     positions: list[int] | None = None
     # All intermediate rows are saved only at explicitly selected layers/sites.
     expert_outputs: bool = False
+    # Exact L2 norms of weighted native expert outputs, without dense vector storage.
+    expert_output_norms: bool = False
     tensor_dtype: Literal["bfloat16", "float32"] = "bfloat16"
     max_bytes: int = Field(default=2_000_000_000, gt=0)
 

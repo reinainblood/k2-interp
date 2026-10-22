@@ -22,12 +22,14 @@ class NativeTrace(AbstractContextManager):
         values: dict[str, torch.Tensor] | None = None,
         observers: dict | None = None,
         transforms: dict | None = None,
+        telemetry=None,
     ):
         self.model, self.spec, self.sink = model, spec, sink
         self.interventions = interventions or []
         self.values = values or {}
         self.observers = observers or {}
         self.transforms = transforms or {}
+        self.telemetry = telemetry
         self.handles, self.originals = [], []
         self.positions = []
         self.token_ids = None
@@ -67,6 +69,8 @@ class NativeTrace(AbstractContextManager):
         self.positions, self.step, self.phase = positions, step, phase
         self.routes.clear()
         self.effective_routes.clear()
+        if self.telemetry:
+            self.telemetry.begin(positions, step, phase, token_ids)
 
     def _selected(self, tensor):
         if tensor.shape[0] != 1:
@@ -86,13 +90,18 @@ class NativeTrace(AbstractContextManager):
         selected, values = None, {}
         for name, tensor in tensors.items():
             selected, value = self._selected(tensor)
-            if value.is_floating_point() and name not in (
-                "router_logits",
-                "router_scores",
-                "selection_scores",
-                "expert_weights",
-                "router_entropy",
-                "routing_margin",
+            if (
+                value.is_floating_point()
+                and not name.endswith(".weighted_norm")
+                and name
+                not in (
+                    "router_logits",
+                    "router_scores",
+                    "selection_scores",
+                    "expert_weights",
+                    "router_entropy",
+                    "routing_margin",
+                )
             ):
                 value = value.to(getattr(torch, self.spec.tensor_dtype))
             values[f"layers.{layer}.{name}"] = value
@@ -124,6 +133,12 @@ class NativeTrace(AbstractContextManager):
                 "keys": keys,
             }
         )
+        if self.telemetry:
+            self.telemetry.capture(
+                layer,
+                positions,
+                {key: self.pending_tensors[key] for key in keys if key != "positions"},
+            )
 
     def flush(self):
         if self.pending_tensors:
@@ -194,7 +209,9 @@ class NativeTrace(AbstractContextManager):
 
     def _moe_pre(self, layer):
         def hook(block, args):
-            if self.spec.expert_outputs and layer in self.spec.layers:
+            if (
+                self.spec.expert_outputs or self.spec.expert_output_norms
+            ) and layer in self.spec.layers:
                 x = args[0]
                 logits = F.linear(x.reshape(-1, x.shape[-1]), block.gate.weight)
                 self.routes[layer] = route(logits, block)
@@ -221,11 +238,19 @@ class NativeTrace(AbstractContextManager):
             slot, row = torch.where((routes["expert_ids"] == expert).T)
             if row.numel() != result.shape[0]:
                 raise ValueError("Expert output row alignment failed")
-            tensor = torch.zeros(
-                (1, len(self.positions), result.shape[-1]), device=result.device, dtype=result.dtype
-            )
-            tensor[0, row] = result * routes["expert_weights"][row, slot, None].to(result.dtype)
-            self.emit(layer, {f"expert.{expert}.weighted_out": tensor})
+            weighted = result * routes["expert_weights"][row, slot, None].to(result.dtype)
+            if self.spec.expert_outputs:
+                tensor = torch.zeros(
+                    (1, len(self.positions), result.shape[-1]),
+                    device=result.device,
+                    dtype=result.dtype,
+                )
+                tensor[0, row] = weighted
+                self.emit(layer, {f"expert.{expert}.weighted_out": tensor})
+            if self.spec.expert_output_norms:
+                norms = torch.zeros((1, len(self.positions), 1), device=result.device)
+                norms[0, row, 0] = weighted.float().norm(dim=-1)
+                self.emit(layer, {f"expert.{expert}.weighted_norm": norms})
 
         return hook
 
@@ -236,7 +261,7 @@ class NativeTrace(AbstractContextManager):
                 for p in self.interventions
                 if p.site in ("router_logits", "expert_ids", "expert_weights")
             }
-            if route_layers and self.spec.expert_outputs:
+            if route_layers and (self.spec.expert_outputs or self.spec.expert_output_norms):
                 raise ValueError(
                     "Expert-output capture with edited routing requires a separate baseline trace"
                 )
@@ -262,7 +287,9 @@ class NativeTrace(AbstractContextManager):
                 if hasattr(block.mlp, "experts"):
                     self.handles.append(block.mlp.register_forward_pre_hook(self._moe_pre(i)))
                     self.handles.append(block.mlp.register_forward_hook(self._moe_post(i)))
-                    if self.spec.expert_outputs and i in self.spec.layers:
+                    if (
+                        self.spec.expert_outputs or self.spec.expert_output_norms
+                    ) and i in self.spec.layers:
                         for e, expert in enumerate(block.mlp.experts):
                             self.handles.append(
                                 expert.register_forward_hook(self._expert_post(i, e))

@@ -22,3 +22,5 @@ checkpoints/
 *.arrow
 *.log
 .DS_Store
+node_modules/
+*.tsbuildinfo

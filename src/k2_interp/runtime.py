@@ -18,8 +18,15 @@ def token_inputs(tokenizer, sample: Sample) -> tuple[list[int], list[int]]:
     if sample.input_ids is not None:
         prompt = sample.input_ids.copy()
     elif sample.messages is not None:
+        messages = [dict(message) for message in sample.messages]
+        for message in messages:
+            # Native template prioritizes reasoning_content over the fast fields.
+            # Keep the API-compatible alias in the archive, but render its native tag.
+            for key in ("think_fast", "think_faster"):
+                if key in message and message.get("reasoning_content") == message[key]:
+                    message.pop("reasoning_content", None)
         prompt = tokenizer.apply_chat_template(
-            sample.messages,
+            messages,
             tokenize=True,
             add_generation_prompt=True,
             return_dict=False,
@@ -96,7 +103,7 @@ class Runtime:
             for p in ("torch", "transformers", "accelerate", "safetensors", "k2-interp")
         }
 
-    def run(self, spec: RunSpec) -> dict:
+    def run(self, spec: RunSpec, telemetry=None) -> dict:
         if spec.checkpoint != self.identity["checkpoint"]:
             raise ValueError("Request checkpoint does not match worker checkpoint")
         writer = TraceWriter(self.root, spec.model_dump(), self.identity, self.commit)
@@ -108,7 +115,7 @@ class Runtime:
                 continue
             sink = writer.sample(sample.id, spec.capture.max_bytes)
             try:
-                with NativeTrace(self.model, spec.capture, sink) as trace:
+                with NativeTrace(self.model, spec.capture, sink, telemetry=telemetry) as trace:
                     result = self.execute(
                         sample, spec.generation, trace, spec.max_context, deadline
                     )
@@ -136,6 +143,8 @@ class Runtime:
         deadline: float,
     ) -> dict:
         prompt, continuation = token_inputs(self.tokenizer, sample)
+        if trace.telemetry:
+            trace.telemetry.prompt(prompt, self.tokenizer, self.identity)
         extra = len(continuation) if continuation else generation.max_new_tokens
         if len(prompt) + extra > max_context:
             raise ValueError(
@@ -179,17 +188,27 @@ class Runtime:
             if trace.sink:
                 # Per-forward persistence also survives interruption during a long response.
                 trace.flush()
-                trace.sink.checkpoint(
-                    {
-                        "input_ids": prompt,
-                        "output_ids": generated,
-                        "all_token_ids": all_ids,
-                        "output_logprobs": scores,
-                        "processed_tokens": len(all_ids),
-                        "step": step,
-                        "phase": phase,
-                    }
-                )
+                progress = {
+                    "input_ids": prompt,
+                    "output_ids": generated,
+                    "all_token_ids": all_ids,
+                    "output_logprobs": scores,
+                    "processed_tokens": len(all_ids),
+                    "step": step,
+                    "phase": phase,
+                }
+                if trace.telemetry:
+                    trace.telemetry.forward_complete(
+                        trace.sink,
+                        prompt,
+                        generated,
+                        scores,
+                        self.tokenizer,
+                        self.model.generation_config,
+                        progress,
+                    )
+                else:
+                    trace.sink.checkpoint(progress)
             if len(generated) == extra or (generated and not continuation and generated[-1] in eos):
                 break
             next_token = (
@@ -232,6 +251,7 @@ class Runtime:
         max_context=8192,
         capture: CaptureSpec | None = None,
         run_id: str,
+        telemetry=None,
     ):
         spec = RunSpec(
             run_id=run_id,
@@ -249,7 +269,7 @@ class Runtime:
             capture=capture or CaptureSpec(router=False, layers=[]),
             max_context=max_context,
         )
-        receipt = self.run(spec)
+        receipt = self.run(spec, telemetry=telemetry)
         sample = receipt["samples"]["chat"]
         result = json.loads((self.root / run_id / sample["attempt"] / "result.json").read_text())
         message = result["assistant_message"]
