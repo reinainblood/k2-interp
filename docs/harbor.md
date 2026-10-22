@@ -117,8 +117,13 @@ Labels on every sample: `outcome`, `benchmark`, `split`, `case_id`, `turns`,
 `final_prompt_length`, `stop` (`submitted`, `idle`, `max_turns` from the adapter;
 `timeout` or `error` from Harbor, so infrastructure endings never pass for the
 model's own decision), `length_hits` (turns that hit the per-request token cap),
-and the verifier's `verifier_status` and `valid`. Template groups are one per
-task, so resampled runs of the same case never straddle dataset splits.
+the verifier's `verifier_status` and `valid`, and doom-loop signals: `repeat_calls`
+(longest run of identical consecutive tool calls), `repeat_ngram_ratio` (fraction of
+repeated 8-grams in the final completion), and `looped` (either ≥ 8 or ≥ 0.5).
+The 375B never received the anti-loop preference stage its smaller siblings did,
+so "loop until the budget runs out" is tracked as its own class rather than folded
+into `wrong`. Template groups are one per task, so resampled runs of the same
+case never straddle dataset splits.
 
 | `outcome` | Meaning |
 | --- | --- |

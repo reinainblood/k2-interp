@@ -56,7 +56,7 @@ The lock uses PyTorch 2.13.0 and Transformers 5.13.0. Tests download the pinned 
 model source/config and instantiate random, reduced-size models with that exact
 implementation. Full 375B weights are required for scientific conclusions.
 
-## Deploy one checkpoint or all eleven
+## Deploy one checkpoint or all twelve
 
 Configure Modal credentials first. Every operation explicitly uses `FDR`.
 
@@ -165,8 +165,8 @@ latent 0 and token 0 have no preassigned semantic meaning.
 
 ## Checkpoints and reproducibility
 
-The pinned registry contains Mid3, Mid4, all five RL specialists, merged RL, and
-SFT1/2/3. Immutable commits, all LFS weight hashes, tokenizer/config/source hashes,
+The pinned registry contains the final pretraining checkpoint, Mid3, Mid4, all five
+RL specialists, merged RL, and SFT1/2/3. Immutable commits, all LFS weight hashes, tokenizer/config/source hashes,
 runtime source hash, and dependency versions travel with each run.
 
 IFM documents Mid4 → RL specialists → merged RL → SFT1 → SFT2 → SFT3. Mid4 already

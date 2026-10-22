@@ -52,6 +52,61 @@ def stop_reason(trial_dir: Path, result: dict) -> str:
     return "timeout"
 
 
+LOOP_REPEAT_CALLS = 8
+LOOP_NGRAM = 8
+LOOP_NGRAM_RATIO = 0.5
+
+
+def repeat_calls(trial_dir: Path) -> int:
+    """Longest run of consecutive identical tool calls in the trajectory."""
+    path = trial_dir / TRAJECTORY
+    if not path.is_file():
+        return 0
+    longest = run = 0
+    previous = None
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if record.get("role") != "assistant":
+            continue
+        call = record.get("tool_call")
+        if call and call == previous:
+            run += 1
+        else:
+            run = 1 if call else 0
+        previous = call
+        longest = max(longest, run)
+    return longest
+
+
+def repeated_ngram_ratio(ids: list[int], n: int = LOOP_NGRAM) -> float:
+    """Fraction of n-grams in a token sequence that occurred earlier in it."""
+    if len(ids) < 2 * n:
+        return 0.0
+    seen: set[tuple[int, ...]] = set()
+    repeats = 0
+    total = len(ids) - n + 1
+    for i in range(total):
+        gram = tuple(ids[i : i + n])
+        if gram in seen:
+            repeats += 1
+        seen.add(gram)
+    return repeats / total
+
+
+def loop_flags(trial_dir: Path, frozen: dict) -> dict:
+    """Mechanical doom-loop signals: repeated calls and repeated n-grams in the final completion."""
+    calls = repeat_calls(trial_dir)
+    final = frozen["final_sequence"][frozen.get("final_prompt_length", 0) :]
+    ratio = repeated_ngram_ratio(final)
+    return {
+        "repeat_calls": calls,
+        "repeat_ngram_ratio": round(ratio, 4),
+        "looped": calls >= LOOP_REPEAT_CALLS or ratio >= LOOP_NGRAM_RATIO,
+    }
+
+
 def length_hits(trial_dir: Path) -> int:
     """Turns whose completion hit the per-request token cap (finish_reason == length)."""
     path = trial_dir / FROZEN
@@ -189,6 +244,7 @@ def load_trials(job: str | Path) -> list[dict]:
                 "trial_dir": str(trial_dir),
                 "stop": stop_reason(trial_dir, result),
                 "length_hits": length_hits(trial_dir),
+                "loop": loop_flags(trial_dir, frozen),
                 "task_name": result.get("task_name"),
                 "benchmark": metadata.get("benchmark"),
                 "split": metadata.get("split"),
@@ -218,6 +274,10 @@ def trial_sample(trial: dict) -> Sample:
         # Infrastructure endings are labeled, not folded into the outcome.
         "stop": trial["stop"],
         "length_hits": trial["length_hits"],
+        # Doom-loop signals, mechanical; the 375B had no anti-loop stage.
+        "looped": trial["loop"]["looped"],
+        "repeat_calls": trial["loop"]["repeat_calls"],
+        "repeat_ngram_ratio": trial["loop"]["repeat_ngram_ratio"],
     }
     if trial["verifier"]:
         labels["verifier_status"] = str(trial["verifier"].get("status"))
@@ -394,4 +454,5 @@ def summarize(job: str | Path) -> dict:
             k: sum(1 for t in trials if t["stop"] == k) for k in sorted({t["stop"] for t in trials})
         },
         "length_hits": sum(t["length_hits"] for t in trials),
+        "looped": sum(1 for t in trials if t["loop"]["looped"]),
     }

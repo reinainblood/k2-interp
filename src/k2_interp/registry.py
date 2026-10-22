@@ -12,6 +12,9 @@ from .schema import digest
 REPO_ID = "IFM/K2-Horizon-375B-A23B"
 # Captured from the official Hub refs. resolve() verifies these against current metadata.
 CHECKPOINTS = {
+    # Last pretraining phase: the form-vs-content baseline for self-report studies.
+    # Same 61-shard geometry as the post-training releases; verified 2026-10-22.
+    "pretrain_ph2_240000": "9640a9fbd5dab74c8778d3690bf6c92fd5ee02e8",
     "mid_3_3500": "a02ec93a1c6d0f3766e8262a48ee8a846a851574",
     "mid_4_6000": "7d22cc0ac26a91003d19482efa71070244239b11",
     "rl_knowledge_work": "becd3c065be2f373bb3529c84637bf2b4742080a",

@@ -23,6 +23,8 @@ from k2_interp.harbor_replay import (
     harbor_split,
     load_trials,
     outcome_label,
+    repeat_calls,
+    repeated_ngram_ratio,
     summarize,
     turn_spans,
     windows,
@@ -357,6 +359,7 @@ def test_build_specs_b1_b2_b3(tmp_path):
     assert sample.labels["outcome"] == "bailed" and sample.split == "test"
     assert sample.template_group == "stereo_imaging-test-c1"
     assert sample.labels["stop"] == "timeout" and sample.labels["length_hits"] == 0
+    assert sample.labels["looped"] is False and sample.labels["repeat_calls"] == 0
     train = next(s for s in spec.samples if s.id.startswith("aeossp"))
     assert train.split == "train" and train.labels["valid"] is True
     RunSpec.model_validate(spec.model_dump())
@@ -387,6 +390,28 @@ def test_build_specs_b1_b2_b3(tmp_path):
     assert len(paths) == 2 and (tmp_path / "specs" / "index.json").exists()
     reloaded = RunSpec.model_validate(json.loads(paths[0].read_text()))
     assert reloaded.protocol["source"] == "harbor"
+
+
+def test_loop_signals(tmp_path):
+    assert repeated_ngram_ratio([1, 2, 3, 4] * 10, n=4) > 0.85
+    assert repeated_ngram_ratio(list(range(100)), n=4) == 0.0
+    assert repeated_ngram_ratio([1, 2, 3], n=4) == 0.0
+    trace = tmp_path / "agent" / "k2trace"
+    trace.mkdir(parents=True)
+    lines = [{"turn": 0, "role": "user", "content": "x"}]
+    lines += [
+        {"turn": i, "role": "assistant", "content": "", "tool_call": "python solve.py"}
+        for i in range(1, 10)
+    ]
+    lines += [{"turn": 10, "role": "assistant", "content": "", "tool_call": "ls"}]
+    lines += [{"turn": 11, "role": "assistant", "content": "", "tool_call": None}]
+    (trace / "trajectory.jsonl").write_text("\n".join(json.dumps(x) for x in lines) + "\n")
+    assert repeat_calls(tmp_path) == 9
+    from k2_interp.harbor_replay import loop_flags
+
+    frozen = {"final_sequence": [0] * 10 + [1, 2, 3, 4] * 20, "final_prompt_length": 10}
+    flags = loop_flags(tmp_path, frozen)
+    assert flags["looped"] and flags["repeat_calls"] == 9 and flags["repeat_ngram_ratio"] > 0.9
 
 
 # --- router features on the tiny native model --------------------------------------------
