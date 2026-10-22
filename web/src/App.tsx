@@ -74,13 +74,17 @@ export default function App() {
     if (!w.session || !w.runId || !view) return;
     setDownloading(true);
     w.setError("");
+    const captureSession = w.session.id;
     try {
       await downloadCapture(turnPath(w.session.id, w.runId), {
         position,
         layer,
         tag,
       });
-      w.setSession(await api<Session>(`/sessions/${w.session.id}`));
+      const updated = await api<Session>(`/sessions/${captureSession}`);
+      w.setSession((current) =>
+        current?.id === captureSession ? updated : current,
+      );
       setTag("");
     } catch (e) {
       w.setError(String(e));
@@ -260,7 +264,7 @@ export default function App() {
                 <button
                   className="capture-button"
                   disabled={
-                    !view?.forward_complete || downloading || inspectBusy
+                    view?.position == null || downloading || inspectBusy
                   }
                   onClick={() => void capture()}
                 >

@@ -59,6 +59,19 @@ export type Turn = {
   created_at: string;
   finish_reason?: string;
   error?: { type: string; message: string };
+  system?: string;
+  settings?: {
+    generation: {
+      max_new_tokens: number;
+      temperature: number;
+      top_p: number;
+      seed: number;
+    };
+    reasoning_effort: string;
+    max_context: number;
+    layers: number[];
+    expert_norms: boolean;
+  };
 };
 export type Session = {
   id: string;

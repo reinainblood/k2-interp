@@ -16,6 +16,12 @@ The runtime is experiment-agnostic. Prompts, chats, traces, trained dictionaries
 and private study results stay outside Git. Examples use public factual questions.
 No scientific finding is implied by a successful software test.
 
+New to the project? Start with [deploying the checkpoints](docs/deployment.md), which
+separates IFM's upstream guidance from this instrumented runtime. Before collecting
+data, read [storage, exports, and recovery](docs/data-safety.md): full-chat exports
+preserve reasoning, while a selected-state capture and a full tensor backup have
+different scopes.
+
 ## Implemented methods
 
 | Stage | Runtime support | Evidence produced |

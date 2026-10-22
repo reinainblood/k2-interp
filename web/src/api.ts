@@ -25,12 +25,24 @@ export async function api<T>(
 export const turnPath = (sessionId: string, runId: string) =>
   `/sessions/${sessionId}/turns/${runId}`;
 export async function downloadCapture(path: string, data: unknown) {
-  const response = await fetch("/api" + path + "/captures", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-K2-Intent": "workbench" },
-    body: JSON.stringify(data),
-    credentials: "same-origin",
-  });
+  const request = () =>
+    fetch("/api" + path + "/captures", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-K2-Intent": "workbench",
+      },
+      body: JSON.stringify(data),
+      credentials: "same-origin",
+    });
+  // Freeze the click's token selection, then wait for that exact native forward
+  // to commit. UI telemetry can arrive before durable tensors are downloadable.
+  const deadline = Date.now() + 120000;
+  let response = await request();
+  while (response.status === 409 && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    response = await request();
+  }
   if (!response.ok)
     throw new Error((await response.json()).detail || response.statusText);
   const blob = await response.blob();

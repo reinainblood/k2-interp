@@ -3,6 +3,10 @@
 `k2-interp/1` is the trace contract. JSON contains metadata; safetensors contains
 numeric arrays. Raw conversations and generated text are private artifact data.
 
+For retention boundaries, full-chat exports (including reasoning), backup commands,
+checksum verification, and interruption recovery, read [the data-safety guide](data-safety.md).
+This page defines the numeric trace format; it is not a complete backup procedure.
+
 ```
 <checkpoint>/<run-id>/
   manifest.json

@@ -24,6 +24,23 @@ export function Chat({
 }) {
   const [text, setText] = useState("");
   const [settings, setSettings] = useState(defaults);
+  useEffect(() => {
+    const stored = session?.turns.find(
+      (turn) => turn.run_id === runId,
+    )?.settings;
+    setSettings(
+      stored
+        ? {
+            ...defaults,
+            ...stored.generation,
+            reasoning_effort: stored.reasoning_effort,
+            max_context: stored.max_context,
+            layers: stored.layers.join(","),
+            expert_norms: stored.expert_norms,
+          }
+        : defaults,
+    );
+  }, [session?.id, runId]);
   const [error, setError] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
   const bottom = useRef<HTMLDivElement>(null);

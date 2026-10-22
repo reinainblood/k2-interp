@@ -10,6 +10,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 import tempfile
 import zipfile
 from pathlib import Path
@@ -42,6 +43,8 @@ def collect_conversation(root: Path, checkpoint: str, session: dict, exported_at
     for turn in result.get("turns", []):
         run_id = identifier(turn["run_id"])
         run = Path(root) / identifier(checkpoint) / run_id
+        if not run.resolve().is_relative_to(Path(root).resolve()):
+            raise ValueError("Conversation run path escapes artifact root")
         item = {"run_id": run_id, "status": "missing", "verified_files": {}}
         manifest_path = run / "manifest.json"
         if not manifest_path.exists():
@@ -117,7 +120,7 @@ def conversation_markdown(conversation: dict) -> str:
             return
         text = value if isinstance(value, str) else json.dumps(value, ensure_ascii=False, indent=2)
         # Avoid accidental closing fences in model output or code conversations.
-        fence = "`" * (max((len(x) for x in __import__("re").findall(r"`+", text)), default=2) + 1)
+        fence = "`" * max(3, max((len(x) for x in re.findall(r"`+", text)), default=0) + 1)
         chunks.extend([f"\n### {label}\n", fence + "text\n" + text + "\n" + fence])
 
     literal("System", conversation.get("system"))

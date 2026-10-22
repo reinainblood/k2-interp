@@ -62,6 +62,8 @@ deployed separately; a reconnect reattaches to the detached model call.
   run IDs, token positions and layer IDs are automatic. The raw capture scope is
   one model forward (all captured layers and positions), not every tensor from
   an entire multi-turn session. Existing CLI downloads remain available.
+  Clicking during a live forward fixes that token selection and waits up to two
+  minutes for its durable commit; it never silently substitutes a later token.
 - **Stop** requests cooperative cancellation at a native layer boundary. Closing
   a tab does not cancel work. Loading weights is not immediately interruptible;
   a stop requested while loading takes effect before inference begins.

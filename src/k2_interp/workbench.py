@@ -202,6 +202,7 @@ def create_workbench(
                 "created_at": utc_now(),
                 "settings": body.model_dump(exclude={"text"}),
                 "assistant": None,
+                "system": session["system"],
             }
             # Persist intent before dispatch. A retry with the same request ID cannot duplicate a run.
             session["turns"].append(turn)

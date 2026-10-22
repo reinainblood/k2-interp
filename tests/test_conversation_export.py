@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
@@ -144,3 +146,78 @@ def test_conversation_archive_contains_raw_ids_and_json_hashes(tmp_path):
             }
     finally:
         Path(path).unlink()
+
+
+def test_export_verifier_checks_all_files_without_extracting(tmp_path):
+    session = {"id": "session-test", "checkpoint": "test", "turns": [make_turn(tmp_path, 0)]}
+    path, _ = conversation_bundle(tmp_path, "test", session, "2026-10-22")
+    try:
+        script = Path(__file__).resolve().parents[1] / "scripts" / "verify_export.py"
+        result = subprocess.run(
+            [sys.executable, str(script), str(path)], capture_output=True, text=True
+        )
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout)["hashes_verified"] is True
+        with zipfile.ZipFile(path, "a") as archive:
+            archive.writestr("unexpected.txt", "not in inventory")
+        result = subprocess.run(
+            [sys.executable, str(script), str(path)], capture_output=True, text=True
+        )
+        assert result.returncode != 0
+        assert "inventory" in result.stderr
+    finally:
+        path.unlink()
+
+
+def test_raw_trace_verifier_checks_tensors_and_manifest(tmp_path):
+    make_turn(tmp_path, 0)
+    root = tmp_path / "test" / "chat-0"
+    script = Path(__file__).resolve().parents[1] / "scripts" / "verify_trace.py"
+    result = subprocess.run(
+        [sys.executable, str(script), str(root)], capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["run_complete"] is True
+    shard = next(root.glob("samples/chat/attempt-*/*.safetensors"))
+    with shard.open("ab") as stream:
+        stream.write(b"corrupt")
+    result = subprocess.run(
+        [sys.executable, str(script), str(root)], capture_output=True, text=True
+    )
+    assert result.returncode != 0
+    assert "checksum" in result.stderr
+
+
+def test_session_export_route_uses_auth_and_preserves_reasoning(tmp_path):
+    from fastapi.testclient import TestClient
+
+    from k2_interp.workbench import create_workbench
+    from k2_interp.workbench_auth import COOKIE, BrowserAuth
+    from k2_interp.workbench_store import SessionStore
+
+    class Backend:
+        checkpoints = ["test"]
+
+        def reload_artifacts(self):
+            pass
+
+    store = SessionStore(tmp_path / "sessions")
+    session = store.create("test")
+    session["turns"].append(make_turn(tmp_path / "artifacts", 0))
+    store.save(session)
+    static = tmp_path / "static"
+    static.mkdir()
+    auth = BrowserAuth("k" * 48, {}, secure=False)
+    client = TestClient(create_workbench(store, Backend(), auth, tmp_path / "artifacts", static))
+    url = f"/api/sessions/{session['id']}/export"
+    assert client.get(url).status_code == 401
+    client.cookies.set(COOKIE, auth.issue())
+    response = client.get(url)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/zip"
+    from io import BytesIO
+
+    with zipfile.ZipFile(BytesIO(response.content)) as archive:
+        data = json.loads(archive.read("conversation.json"))
+        assert data["turns"][0]["assistant"]["reasoning_content"].startswith("Reason 0")
+        assert data["export"]["archive_complete"]

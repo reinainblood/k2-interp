@@ -1,5 +1,9 @@
 # Operations
 
+For a first deployment, follow [the checkpoint deployment guide](deployment.md).
+For protecting conversations, reasoning, and raw captures, follow
+[storage, exports, and recovery](data-safety.md) before collecting study data.
+
 Request schemas can be exported with `k2-interp schema run` (also `sample`, `capture`,
 `intervention`, `chat`, and `training`). Run wall-time budgets are checked between
 model forwards; Modal's function timeout is the outer limit. A long forward can
