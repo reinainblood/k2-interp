@@ -60,6 +60,11 @@ def score(
         token_scores = logp.gather(-1, expected[:, None]).squeeze(-1)
         if len(trace.applied) != len(patches or []):
             raise ValueError("An intervention did not fire at the requested layer/position")
+        if any(
+            seen != set(p.positions)
+            for seen, p in zip(trace.applied_positions, patches or [], strict=True)
+        ):
+            raise ValueError("Not every requested intervention position was processed")
     return {
         "sum_logprob": float(token_scores.sum()),
         "mean_logprob": float(token_scores.mean()),

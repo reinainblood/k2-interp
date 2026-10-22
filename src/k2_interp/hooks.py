@@ -35,6 +35,7 @@ class NativeTrace(AbstractContextManager):
         self.routes = {}
         self.effective_routes = {}
         self.applied = set()
+        self.applied_positions = [set() for _ in self.interventions]
         self.layers = model.model.layers
         wanted = spec.layers + [p.layer for p in self.interventions]
         if any(i >= len(self.layers) for i in wanted):
@@ -45,6 +46,12 @@ class NativeTrace(AbstractContextManager):
                     raise ValueError("Routing intervention requested on a dense layer")
             if patch.value_key and patch.value_key not in self.values:
                 raise ValueError(f"Missing intervention tensor {patch.value_key}")
+            if patch.value_key:
+                value = self.values[patch.value_key]
+                if not bool(torch.isfinite(value).all()):
+                    raise ValueError("Intervention values must be finite")
+                if patch.site == "expert_ids" and value.is_floating_point():
+                    raise ValueError("Expert-id replacement tensors must have integer dtype")
 
     def begin(self, positions: list[int], *, step: int, phase: str) -> None:
         self.positions, self.step, self.phase = positions, step, phase
@@ -117,6 +124,7 @@ class NativeTrace(AbstractContextManager):
                     value = current + value * patch.scale
             result[:, list(indices)] = value
             self.applied.add(i)
+            self.applied_positions[i].update(self.positions[j] for j in indices)
         transform = self.transforms.get((layer, site))
         if transform:
             result = transform(result, self.positions)

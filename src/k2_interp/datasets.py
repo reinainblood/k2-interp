@@ -12,11 +12,11 @@ from .artifacts import atomic_json, file_hash, iter_records
 from .schema import SCHEMA_VERSION, digest
 
 
-def site_rows(run: str | Path, site: str) -> dict:
+def site_rows(run: str | Path, site: str, selected_sample: str | None = None) -> dict:
     run = Path(run)
     manifest = json.loads((run / "manifest.json").read_text())
     rows = {}
-    for sample_id, meta, tensors in iter_records(run):
+    for sample_id, meta, tensors in iter_records(run, selected_sample, fields={site}):
         if site not in tensors:
             continue
         sample = rows.setdefault(sample_id, {"rows": {}, "manifest": manifest})
@@ -50,14 +50,19 @@ def build_dataset(views: list[dict], output: str | Path) -> dict:
     if (output / "dataset.json").exists():
         raise FileExistsError("Dataset already exists; use a new immutable output directory")
     output.mkdir(parents=True, exist_ok=True)
-    loaded = [site_rows(v["run"], v["site"]) for v in views]
-    sample_sets = [set(r) for r in loaded]
+    sample_sets = [
+        {p.parent.name for p in (Path(v["run"]) / "samples").glob("*/complete.json")} for v in views
+    ]
     if any(s != sample_sets[0] for s in sample_sets):
         raise ValueError("View sample sets differ; explicitly select aligned samples first")
     shards = []
     dimensions = {}
     groups = {}
     for sample_id in sorted(sample_sets[0]):
+        # Bound peak RAM by a single sample, not the entire activation corpus.
+        loaded = [site_rows(v["run"], v["site"], sample_id) for v in views]
+        if any(sample_id not in rows for rows in loaded):
+            raise ValueError(f"Requested site missing from sample {sample_id}")
         results = [r[sample_id]["result"] for r in loaded]
         if any(r["all_token_ids"] != results[0]["all_token_ids"] for r in results):
             raise ValueError(

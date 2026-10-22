@@ -26,7 +26,7 @@ def identifier(value: str) -> str:
 
 
 class Contract(BaseModel):
-    model_config = ConfigDict(extra="forbid", validate_assignment=True)
+    model_config = ConfigDict(extra="forbid", validate_assignment=True, allow_inf_nan=False)
 
 
 class CaptureSpec(Contract):
@@ -107,6 +107,19 @@ class RunSpec(Contract):
         if len({s.id for s in self.samples}) != len(self.samples):
             raise ValueError("Sample ids must be unique")
         return self
+
+
+class ChatRequest(Contract):
+    model: str
+    messages: list[dict[str, Any]] = Field(min_length=1)
+    max_tokens: int = Field(default=256, ge=1, le=8192)
+    temperature: float = Field(default=0, ge=0, le=5)
+    top_p: float = Field(default=1, gt=0, le=1)
+    seed: int = Field(default=0, ge=0)
+    stream: bool = False
+    chat_template_kwargs: dict[str, Any] = Field(
+        default_factory=lambda: {"reasoning_effort": "high"}
+    )
 
 
 class Intervention(Contract):

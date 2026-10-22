@@ -172,15 +172,23 @@ class Runtime:
         max_new_tokens=256,
         seed=0,
         temperature=0,
+        top_p=1,
+        chat_template_kwargs=None,
         capture: CaptureSpec | None = None,
         run_id: str,
     ):
         spec = RunSpec(
             run_id=run_id,
             checkpoint=self.identity["checkpoint"],
-            samples=[Sample(id="chat", messages=messages)],
+            samples=[
+                Sample(
+                    id="chat",
+                    messages=messages,
+                    chat_template_kwargs=chat_template_kwargs or {"reasoning_effort": "high"},
+                )
+            ],
             generation=GenerationSpec(
-                max_new_tokens=max_new_tokens, seed=seed, temperature=temperature
+                max_new_tokens=max_new_tokens, seed=seed, temperature=temperature, top_p=top_p
             ),
             capture=capture or CaptureSpec(router=False, layers=[]),
         )
@@ -188,6 +196,11 @@ class Runtime:
         sample = receipt["samples"]["chat"]
         result = json.loads((self.root / run_id / sample["attempt"] / "result.json").read_text())
         text = result["output_text"]
+        eos = self.model.generation_config.eos_token_id
+        for token in [eos] if isinstance(eos, int) else (eos or []):
+            marker = self.tokenizer.decode([token], skip_special_tokens=False)
+            if marker and text.endswith(marker):
+                text = text[: -len(marker)]
         reasoning = ""
         if "</think>" in text:
             reasoning, text = text.split("</think>", 1)

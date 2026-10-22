@@ -138,7 +138,7 @@ class SampleWriter:
         self.checkpoint()
 
 
-def iter_records(run: str | Path, sample_id: str | None = None):
+def iter_records(run: str | Path, sample_id: str | None = None, fields: set[str] | None = None):
     root = Path(run)
     receipts = (
         [root / "samples" / identifier(sample_id) / "complete.json"]
@@ -149,14 +149,18 @@ def iter_records(run: str | Path, sample_id: str | None = None):
         receipt = json.loads(path.read_text())
         for relative, expected in sorted(receipt["files"].items()):
             target = root / relative
-            if file_hash(target) != expected:
-                raise ValueError(f"Artifact hash mismatch: {relative}")
             if target.name.startswith("step-") and target.suffix == ".json":
+                if file_hash(target) != expected:
+                    raise ValueError(f"Artifact hash mismatch: {relative}")
                 meta = json.loads(target.read_text())
+                if fields is not None and not fields.intersection(meta["tensors"]):
+                    continue
                 tensor_path = target.parent / meta["tensor_file"]
                 tensor_relative = str(tensor_path.relative_to(root))
                 if receipt["files"].get(tensor_relative) != file_hash(tensor_path):
                     raise ValueError("Unverified tensor shard")
                 with safe_open(tensor_path, framework="pt", device="cpu") as f:
-                    tensors = {k: f.get_tensor(k) for k in f.keys()}
+                    tensors = {
+                        k: f.get_tensor(k) for k in f.keys() if fields is None or k in fields
+                    }
                 yield path.parent.name, meta, tensors

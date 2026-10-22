@@ -12,6 +12,7 @@ from pathlib import Path
 import modal
 
 from k2_interp.registry import CHECKPOINTS
+from k2_interp.schema import ChatRequest, RunSpec
 
 ENVIRONMENT = "FDR"
 CHECKPOINT = os.environ.get("K2_CHECKPOINT", "sft_3_1500")
@@ -256,8 +257,6 @@ def analyze(request: dict):
 def api():
     from fastapi import FastAPI, HTTPException
 
-    from k2_interp.schema import RunSpec
-
     web = FastAPI(title="K2 Interp", version="0.1.0")
 
     @web.get("/health")
@@ -292,23 +291,25 @@ def api():
         return {"call_id": call.object_id, "run_id": request.run_id}
 
     @web.post("/v1/chat/completions")
-    async def chat(request: dict):
+    async def chat(request: ChatRequest):
         import time
         import uuid
 
-        if request.get("stream"):
+        if request.stream:
             raise HTTPException(400, "Streaming is not supported; use non-streaming chat")
-        if request.get("model", CHECKPOINT) != CHECKPOINT:
+        if request.model != CHECKPOINT:
             raise HTTPException(400, "Checkpoint mismatch")
         await preflight.remote.aio()
         run_id = "chat-" + uuid.uuid4().hex
         response = await NativeWorker().chat.remote.aio(
             {
-                "messages": request["messages"],
+                "messages": request.messages,
                 "run_id": run_id,
-                "max_new_tokens": request.get("max_tokens", 256),
-                "temperature": request.get("temperature", 0),
-                "seed": request.get("seed", 0),
+                "max_new_tokens": request.max_tokens,
+                "temperature": request.temperature,
+                "top_p": request.top_p,
+                "seed": request.seed,
+                "chat_template_kwargs": request.chat_template_kwargs,
             }
         )
         result = response["result"]
