@@ -158,6 +158,9 @@ class ActivationDataset:
             raise ValueError(f"No {split} shards; provide independent template-group splits")
         if shuffle:
             shards = [shards[i] for i in torch.randperm(len(shards), generator=generator)]
+        pending_x, pending_y = [], []
+        pending_rows = 0
+        buffer_rows = batch_size * 8
         for shard in shards:
             path = self.path / shard["file"]
             if file_hash(path) != shard["sha256"]:
@@ -165,6 +168,28 @@ class ActivationDataset:
             tensors = load_file(path)
             x = torch.cat([tensors[v] for v in self.input_views], dim=-1).float()
             y = torch.cat([tensors[v] for v in self.target_views], dim=-1).float()
-            order = torch.randperm(len(x), generator=generator) if shuffle else torch.arange(len(x))
+            for start in range(0, len(x), buffer_rows):
+                pending_x.append(x[start : start + buffer_rows])
+                pending_y.append(y[start : start + buffer_rows])
+                pending_rows += len(pending_x[-1])
+                if pending_rows < buffer_rows:
+                    continue
+                bx, by = torch.cat(pending_x), torch.cat(pending_y)
+                order = (
+                    torch.randperm(len(bx), generator=generator)
+                    if shuffle
+                    else torch.arange(len(bx))
+                )
+                full = len(order) // batch_size * batch_size
+                for indices in order[:full].split(batch_size):
+                    yield bx[indices], by[indices]
+                remaining = order[full:]
+                pending_x, pending_y = [bx[remaining]], [by[remaining]]
+                pending_rows = len(remaining)
+        if pending_rows:
+            bx, by = torch.cat(pending_x), torch.cat(pending_y)
+            order = (
+                torch.randperm(len(bx), generator=generator) if shuffle else torch.arange(len(bx))
+            )
             for indices in order.split(batch_size):
-                yield x[indices], y[indices]
+                yield bx[indices], by[indices]
