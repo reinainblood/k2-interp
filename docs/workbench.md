@@ -51,6 +51,8 @@ deployed separately; a reconnect reattaches to the detached model call.
   system edit before the next turn. Active-turn settings are locked. Every run
   manifest preserves the effective system prompt, full message history, thinking
   fields, and generation configuration.
+  Browser defaults use IFM's high effort, temperature 1.0, and top-p 0.95;
+  the 512-token output limit is a separate, editable operational bound.
 - A turn selects its own trace. **Follow** tracks the last input token being
   processed. Clicking a token loads that exact position from verified tensor
   artifacts; the layer input and heatmap select the expert detail view.

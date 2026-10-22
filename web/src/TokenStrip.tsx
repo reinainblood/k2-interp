@@ -17,6 +17,7 @@ export function TokenStrip({
 }) {
   const ref = useRef<HTMLButtonElement>(null);
   const [windowStart, setWindowStart] = useState(0);
+  const [query, setQuery] = useState("");
   const tokens = frame?.token_text || [];
   const ids = [...(frame?.input_ids || []), ...(frame?.output_ids || [])];
   useEffect(() => {
@@ -26,6 +27,18 @@ export function TokenStrip({
     ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
   }, [selected]);
   const start = Math.min(windowStart, Math.max(0, tokens.length - 1));
+  const matches = query
+    ? tokens.flatMap((text, p) =>
+        tokenLabel(text).toLowerCase().includes(query.toLowerCase()) ? [p] : [],
+      )
+    : [];
+  function findNext() {
+    const next = matches.find((p) => p > selected) ?? matches[0];
+    if (next != null) {
+      setWindowStart(Math.max(0, next - 40));
+      onSelect(next);
+    }
+  }
   return (
     <section className="instrument token-panel">
       <div className="panel-heading">
@@ -72,6 +85,24 @@ export function TokenStrip({
               : undefined) ??
             "·"}
         </span>
+      </div>
+      <div className="token-search">
+        <label>
+          Find token
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") findNext();
+            }}
+          />
+        </label>
+        <span className="readout">
+          {query ? `${matches.length} matches` : "·"}
+        </span>
+        <button disabled={!matches.length} onClick={findNext}>
+          Next
+        </button>
       </div>
       <div className="token-list" aria-label="Captured input token positions">
         {!tokens.length && <span className="empty-inline">No capture</span>}

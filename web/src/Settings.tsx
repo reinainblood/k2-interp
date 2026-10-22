@@ -11,7 +11,7 @@ export type SettingsValue = {
 };
 export const defaults: SettingsValue = {
   max_new_tokens: 512,
-  temperature: 0.7,
+  temperature: 1.0,
   top_p: 0.95,
   seed: 0,
   reasoning_effort: "high",
