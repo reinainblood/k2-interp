@@ -23,6 +23,12 @@ export function TokenStrip({
   const ids = [...(frame?.input_ids || []), ...(frame?.output_ids || [])];
   useEffect(() => {
     if (follow) setWindowStart(Math.max(0, selected - 90));
+    else
+      setWindowStart((start) =>
+        selected < start || selected >= start + 180
+          ? Math.max(0, selected - 40)
+          : start,
+      );
   }, [selected, follow]);
   useEffect(() => {
     const list = listRef.current,

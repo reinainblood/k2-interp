@@ -4,9 +4,43 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { ExpertGraph } from "./DetailGraphs";
 import { Settings, defaults } from "./Settings";
 import { tokenLabel } from "./types";
+import { TokenStrip } from "./TokenStrip";
 afterEach(cleanup);
 
 describe("literal data views", () => {
+  it("reveals a bookmarked token outside the current token window", () => {
+    const frame = {
+      run_id: "test",
+      status: "complete",
+      sequence: 1,
+      token_text: Array.from({ length: 400 }, (_, i) => `t${i}`),
+      input_tokens: 400,
+      input_ids: Array.from({ length: 400 }, (_, i) => i),
+    };
+    const { rerender } = render(
+      <TokenStrip
+        frame={frame}
+        selected={220}
+        onSelect={vi.fn()}
+        follow
+        onFollow={vi.fn()}
+      />,
+    );
+    rerender(
+      <TokenStrip
+        frame={frame}
+        selected={10}
+        onSelect={vi.fn()}
+        follow={false}
+        onFollow={vi.fn()}
+      />,
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "10 t10" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
   it("distinguishes uncollected expert outputs from measured zero", () => {
     render(
       <ExpertGraph

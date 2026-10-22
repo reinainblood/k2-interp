@@ -107,7 +107,7 @@ published in this repository. No touch-specific feature or causal finding is cla
 
 ## Current checks and scope
 
-- 43 Python tests and 6 frontend tests cover native model/tokenizer source,
+- 43 Python tests and 7 frontend tests cover native model/tokenizer source,
   synthetic data, authentication, capture integrity, exports, and editable controls.
 - Ruff, formatting, wheel/source builds, and GitHub CI pass.
 - Workbench HTTP anonymous denial and authenticated real model calls are verified.
