@@ -57,17 +57,24 @@ def response_message(tokenizer, generation_config, prompt: list[int], generated:
     while content_ids and content_ids[-1] in eos_ids:
         content_ids.pop()
     text = tokenizer.decode(content_ids, skip_special_tokens=False)
-    reasoning = ""
-    if "</think>" in text:
-        reasoning, text = text.split("</think>", 1)
-        reasoning = reasoning.removeprefix("<think>").strip()
-    elif text.lstrip().startswith("<think>") or tokenizer.decode(
-        prompt, skip_special_tokens=False
-    ).rstrip().endswith("<think>"):
-        reasoning, text = text.removeprefix("<think>").strip(), ""
-    message = {"role": "assistant", "content": text.strip()}
-    if reasoning:
-        message["reasoning_content"] = reasoning
+    reasoning, selected_tag = "", "ifm|think"
+    prompt_text = tokenizer.decode(prompt, skip_special_tokens=False).rstrip()
+    for tag in ("ifm|think", "ifm|think_fast", "ifm|think_faster", "think"):
+        opening, closing = f"<{tag}>", f"</{tag}>"
+        if closing in text:
+            reasoning, text = text.split(closing, 1)
+            reasoning = reasoning.removeprefix(opening).strip()
+            selected_tag = tag
+            break
+        if text.lstrip().startswith(opening) or prompt_text.endswith(opening):
+            reasoning, text = text.removeprefix(opening).strip(), ""
+            selected_tag = tag
+            break
+    # K2 requires an explicit thinking field on every assistant history turn,
+    # including an empty field when there was no generated reasoning.
+    message = {"role": "assistant", "content": text.strip(), "reasoning_content": reasoning}
+    if selected_tag in ("ifm|think_fast", "ifm|think_faster"):
+        message[selected_tag.removeprefix("ifm|")] = reasoning
     return message
 
 

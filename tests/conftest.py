@@ -61,3 +61,26 @@ def tokenizer():
             return list(map(str, ids))
 
     return Tokenizer()
+
+
+@pytest.fixture(scope="session")
+def native_tokenizer(tmp_path_factory):
+    from huggingface_hub import snapshot_download
+    from transformers import AutoTokenizer
+
+    from k2_interp.registry import CHECKPOINTS, REPO_ID
+
+    path = snapshot_download(
+        REPO_ID,
+        revision=CHECKPOINTS["sft_3_1500"],
+        allow_patterns=[
+            "config.json",
+            "*.py",
+            "tokenizer.json",
+            "tokenizer_config.json",
+            "chat_template.jinja",
+            "special_tokens_map.json",
+        ],
+        cache_dir=tmp_path_factory.mktemp("tokenizer"),
+    )
+    return AutoTokenizer.from_pretrained(path, trust_remote_code=True)

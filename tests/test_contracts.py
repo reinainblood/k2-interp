@@ -47,3 +47,40 @@ def test_reasoning_and_eos_parsing():
         "reasoning_content": "reasoning",
     }
     assert response_message(tok, cfg, [5], [11])["content"] == "word1"
+
+
+def test_actual_ifm_template_roundtrip(native_tokenizer):
+    from types import SimpleNamespace
+
+    from k2_interp.runtime import response_message
+
+    tok = native_tokenizer
+    for effort, tag, field in (
+        ("high", "ifm|think", "reasoning_content"),
+        ("medium", "ifm|think_fast", "think_fast"),
+        ("low", "ifm|think_faster", "think_faster"),
+    ):
+        messages = [{"role": "user", "content": "Name a city."}]
+        prompt = tok.apply_chat_template(
+            messages, tokenize=True, add_generation_prompt=True, reasoning_effort=effort
+        )
+        answer = tok.encode(f"Consider Paris.</{tag}>Paris", add_special_tokens=False)
+        message = response_message(
+            tok, SimpleNamespace(eos_token_id=tok.eos_token_id), prompt, answer
+        )
+        assert message["content"] == "Paris" and message[field] == "Consider Paris."
+        rendered = tok.apply_chat_template(
+            messages + [message, {"role": "user", "content": "Another?"}],
+            tokenize=False,
+            add_generation_prompt=True,
+        )
+        assert f"<{tag}>" in rendered and "Consider Paris." in rendered
+        incomplete = response_message(
+            tok,
+            SimpleNamespace(eos_token_id=tok.eos_token_id),
+            prompt,
+            tok.encode("Thinking", add_special_tokens=False),
+        )
+        assert incomplete["content"] == "" and incomplete["reasoning_content"] == "Thinking"
+    empty = {"role": "assistant", "content": "Paris", "reasoning_content": ""}
+    tok.apply_chat_template(messages + [empty], tokenize=True)
