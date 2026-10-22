@@ -34,6 +34,7 @@ export K2_INTERP_ENDPOINT=https://<your-app>.modal.run
 export MODAL_PROXY_TOKEN_ID=... MODAL_PROXY_TOKEN_SECRET=...
 harbor run -p tasks -a k2_interp.harbor:K2Agent \
   --ak checkpoint=sft_3_1500 --ak seed=7 --ak max_tokens=8192 \
+  --ak temperature=1.0 --ak top_p=0.95 \
   -n 1 --jobs-dir results --job-name a0-sft3
 harbor agent schema k2_interp.harbor:K2Agent    # every option and its default
 ```
@@ -67,6 +68,10 @@ free generation rather than replay.
 Assistant turns are appended to the history exactly as the server rendered
 them, including `reasoning_content`; K2's template requires that field on every
 history turn.
+
+Defaults follow IFM's recommended sampling (temperature 1.0, top-p 0.95, high
+reasoning effort) with a fixed seed. Greedy decoding is available but produces
+repetition loops that look exactly like an impasse; use it knowingly.
 
 Checkpoints without a trained reasoning channel (mid-training ones) will not
 close a think tag the template opened, so their "reasoning" is ordinary
@@ -109,14 +114,18 @@ middle of the sequence. Earlier turns are searched for inside the final prompt
 only when at least 8 tokens long, because short completions recur by chance.
 
 Labels on every sample: `outcome`, `benchmark`, `split`, `case_id`, `turns`,
-`final_prompt_length`, and the verifier's `verifier_status` and `valid`.
+`final_prompt_length`, `stop` (`submitted`, `idle`, `max_turns` from the adapter;
+`timeout` or `error` from Harbor, so infrastructure endings never pass for the
+model's own decision), `length_hits` (turns that hit the per-request token cap),
+and the verifier's `verifier_status` and `valid`. Template groups are one per
+task, so resampled runs of the same case never straddle dataset splits.
 
 | `outcome` | Meaning |
 | --- | --- |
 | `bailed` | no solution file was written |
 | `wrong` | the verifier rejected the submission, or crashed on it |
 | `empty` | schema-valid but did no work (a coverage, completion, track, selection, or service metric is exactly zero) |
-| `pushed` | valid with nonzero work |
+| `solved` | valid with nonzero work |
 | `unscored` | no verifier report |
 
 Benchmark `train*` splits map to k2-interp `train`, `test*` to `test`, so the

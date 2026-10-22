@@ -29,6 +29,36 @@ from .schema import ROUTER_SUMMARY_FIELDS, CaptureSpec, GenerationSpec, RunSpec,
 MOE_LAYERS = list(range(3, 61))
 FROZEN = Path("agent") / "k2trace" / "frozen.json"
 TRAJECTORY = Path("agent") / "k2trace" / "trajectory.jsonl"
+ADAPTER = Path("agent") / "k2trace" / "adapter.json"
+
+
+def stop_reason(trial_dir: Path, result: dict) -> str:
+    """How the run ended: submitted / idle / max_turns from the adapter, else Harbor's view.
+
+    Infrastructure endings (Harbor timeout, errored trial) are reported as such so
+    they are never mistaken for the model's own decision to stop.
+    """
+    if result.get("exception_info"):
+        return "error"
+    path = trial_dir / TRAJECTORY
+    if path.is_file():
+        for line in reversed(path.read_text().splitlines()):
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if record.get("role") == "adapter" and "stop" in record:
+                return str(record["stop"])
+            break
+    return "timeout"
+
+
+def length_hits(trial_dir: Path) -> int:
+    """Turns whose completion hit the per-request token cap (finish_reason == length)."""
+    path = trial_dir / FROZEN
+    if not path.is_file():
+        return 0
+    frozen = json.loads(path.read_text())
+    return sum(1 for t in frozen.get("turns", []) if t.get("finish_reason") == "length")
 
 
 # A schema-valid submission that does no work: AstroAgentBench's "valid-but-zero"
@@ -40,7 +70,7 @@ def outcome_label(report: dict | None) -> str:
     """Collapse Harbor's verifier report to the study classes.
 
     bailed  no solution file           wrong   rejected by the verifier, or crashed
-    empty   valid but does nothing     pushed  valid with nonzero work
+    empty   valid but does nothing     solved  valid with nonzero work
     """
     if report is None:
         return "unscored"
@@ -52,7 +82,7 @@ def outcome_label(report: dict | None) -> str:
     metrics = report.get("metrics") or {}
     if any(metrics.get(name) == 0 for name in EMPTY_METRICS):
         return "empty"
-    return "pushed"
+    return "solved"
 
 
 def harbor_split(split: str | None) -> str:
@@ -157,6 +187,8 @@ def load_trials(job: str | Path) -> list[dict]:
             {
                 "trial_name": result["trial_name"],
                 "trial_dir": str(trial_dir),
+                "stop": stop_reason(trial_dir, result),
+                "length_hits": length_hits(trial_dir),
                 "task_name": result.get("task_name"),
                 "benchmark": metadata.get("benchmark"),
                 "split": metadata.get("split"),
@@ -183,6 +215,9 @@ def trial_sample(trial: dict) -> Sample:
         "case_id": trial["case_id"] or "",
         "turns": trial["turns"],
         "final_prompt_length": trial["frozen"]["final_prompt_length"],
+        # Infrastructure endings are labeled, not folded into the outcome.
+        "stop": trial["stop"],
+        "length_hits": trial["length_hits"],
     }
     if trial["verifier"]:
         labels["verifier_status"] = str(trial["verifier"].get("status"))
@@ -194,7 +229,8 @@ def trial_sample(trial: dict) -> Sample:
         input_ids=sequence[:-1],
         continuation_ids=sequence[-1:],
         labels=labels,
-        template_group=f"{trial['benchmark']}-{trial['split']}",
+        # One group per task: resampled runs of the same case never straddle splits.
+        template_group=f"{trial['benchmark']}-{trial['split']}-{trial['case_id']}",
         split=harbor_split(trial["split"]),
     )
 
@@ -354,4 +390,8 @@ def summarize(job: str | Path) -> dict:
             "min": min(t["turns"] for t in trials),
             "max": max(t["turns"] for t in trials),
         },
+        "stops": {
+            k: sum(1 for t in trials if t["stop"] == k) for k in sorted({t["stop"] for t in trials})
+        },
+        "length_hits": sum(t["length_hits"] for t in trials),
     }

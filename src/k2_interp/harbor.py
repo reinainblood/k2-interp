@@ -331,8 +331,10 @@ def _options_model():
         max_idle_turns: int = Field(default=3, ge=1)
         max_tokens: int = Field(default=8192, ge=1, le=8192)
         max_context: int = Field(default=262144, ge=2, le=524288)
-        temperature: float = Field(default=0.0, ge=0, le=5)
-        top_p: float = Field(default=1.0, gt=0, le=1)
+        # IFM's recommended sampling. Greedy decoding produces repetition loops
+        # that look exactly like impasse, so it is not the default here.
+        temperature: float = Field(default=1.0, ge=0, le=5)
+        top_p: float = Field(default=0.95, gt=0, le=1)
         seed: int = Field(default=7, ge=0)
         reasoning_effort: str = Field(default="high")
         exec_timeout_sec: int = Field(default=600, ge=1)

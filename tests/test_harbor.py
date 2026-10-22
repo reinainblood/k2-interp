@@ -247,12 +247,12 @@ def test_outcome_label_and_split():
     assert outcome_label({"status": "missing_solution", "valid": False}) == "bailed"
     assert outcome_label({"status": "invalid", "valid": False}) == "wrong"
     assert outcome_label({"status": "error"}) == "wrong"
-    assert outcome_label({"status": "valid", "valid": True}) == "pushed"
+    assert outcome_label({"status": "valid", "valid": True}) == "solved"
     assert (
         outcome_label({"status": "valid", "valid": True, "metrics": {"coverage_ratio": 0.0}})
         == "empty"
     )
-    assert outcome_label({"status": "valid", "valid": True, "metrics": {"CR": 0.4}}) == "pushed"
+    assert outcome_label({"status": "valid", "valid": True, "metrics": {"CR": 0.4}}) == "solved"
     assert harbor_split("train") == "train"
     assert harbor_split("test_hard") == "test"
     assert harbor_split("test_horizon_2022") == "test"
@@ -339,7 +339,7 @@ def test_build_specs_b1_b2_b3(tmp_path):
     (job / "nop__C" / "result.json").write_text(json.dumps({"trial_name": "nop__C"}))
 
     trials = load_trials(job)
-    assert [t["outcome"] for t in trials] == ["pushed", "bailed"]
+    assert [t["outcome"] for t in trials] == ["solved", "bailed"]
     summary = summarize(job)
     assert summary["trials"] == 2 and summary["by_benchmark"]["stereo_imaging"] == {"bailed": 1}
 
@@ -355,7 +355,8 @@ def test_build_specs_b1_b2_b3(tmp_path):
     sample = next(s for s in spec.samples if s.id.startswith("stereo"))
     assert sample.input_ids + sample.continuation_ids == [1, 2, 3, 4, 5, 6] + list(range(7, 40))
     assert sample.labels["outcome"] == "bailed" and sample.split == "test"
-    assert sample.template_group == "stereo_imaging-test"
+    assert sample.template_group == "stereo_imaging-test-c1"
+    assert sample.labels["stop"] == "timeout" and sample.labels["length_hits"] == 0
     train = next(s for s in spec.samples if s.id.startswith("aeossp"))
     assert train.split == "train" and train.labels["valid"] is True
     RunSpec.model_validate(spec.model_dump())
