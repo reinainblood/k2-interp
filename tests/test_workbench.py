@@ -53,7 +53,7 @@ def test_live_projection_matches_native_tensors(traced):
         assert all(row["expert_norms"][str(i)] > 0 for i in row["expert_ids"])
     first = inspect_token(root, "sft_3_1500", "trace", 0)
     assert first["token_id"] == result["input_ids"][0]
-    assert "forward_expert_counts" not in first["layers"]["1"]
+    assert sum(first["layers"]["1"]["forward_expert_counts"]) == 2 * len(result["input_ids"])
     assert latest_projection(root, "sft_3_1500", "trace")["status"] == "complete"
 
 

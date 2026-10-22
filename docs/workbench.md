@@ -85,8 +85,10 @@ Router plots display logical expert IDs, native selected weights, or unbiased
 sigmoid scores. Weights include the native scaling factor (sum approximately
 2.5); sigmoid scores are not categorical probabilities. H-sigma is entropy after
 explicitly normalizing sigmoid scores. Delta-k is the corrected selection-score
-gap at the top-k boundary. Forward load counts all input positions of the current
-forward and is omitted for single-position historical slices.
+gap at the top-k boundary. Forward load counts all input positions of the source
+forward. Historical token inspection loads these aggregates from the verified
+original forward projection, separately from the selected token's routing weights.
+Older traces without a stored projection show no aggregate rather than fabricating one.
 
 Expert output L2 is the norm of the **weighted native expert output**, calculated
 in float32 from the native weighted vector. It is collected only at selected

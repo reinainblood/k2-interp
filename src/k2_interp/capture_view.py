@@ -93,6 +93,17 @@ def inspect_token(root, checkpoint, run_id, position):
                 token_id = record["token_ids"][row] if record.get("token_ids") else None
     if not layers:
         raise FileNotFoundError("Token is not in a committed capture")
+    # Preserve the whole-forward load view when inspecting a single token. These
+    # aggregates come from the verified original forward, never from the one-row slice.
+    projection_path = attempt / f"workbench-step-{step:06d}.json"
+    if str(projection_path.relative_to(run)) in files:
+        verified(run, projection_path, files)
+        forward = read_json(projection_path)
+        for layer, row in layers.items():
+            recorded = forward.get("layers", {}).get(layer, {})
+            for key in ("forward_expert_counts", "forward_expert_mass"):
+                if key in recorded:
+                    row[key] = recorded[key]
     return {
         "run_id": run_id,
         "checkpoint": checkpoint,
