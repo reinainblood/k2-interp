@@ -139,7 +139,7 @@ export function RouterMatrix({ frame, layer, onLayer, theme }: Props) {
             : `p${frame?.position ?? "·"} / ${frame?.projection || "No capture"}`}
         </span>
         <span className="legend">
-          <i />0 <b /> {number(max, 4)}
+          <i />0 <b /> {values.length ? number(max, 4) : "·"}
         </span>
       </div>
     </section>

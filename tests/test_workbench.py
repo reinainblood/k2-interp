@@ -218,3 +218,20 @@ def test_dispatch_idempotency_system_edit_and_reasoning_history(web_client):
     assert backend.requests[-1]["messages"][0]["content"] == "second"
     assert backend.requests[-1]["messages"][2] == message
     assert store.get(session["id"])["turns"][0]["assistant"] == message
+
+
+def test_authoritative_worker_state_repairs_dispatch_classification(web_client):
+    client, auth, backend, store = web_client
+    authorize(client, auth)
+    session = client.post("/api/sessions", json={}).json()
+    prefix = f"/api/sessions/{session['id']}"
+    turn = client.post(prefix + "/turns", json={"text": "abc", "request_id": "c" * 32}).json()
+    store.update_turn(
+        session["id"],
+        turn["run_id"],
+        {"status": "failed", "updated_at": "before", "error": {"type": "TimeoutError"}},
+    )
+    backend.states[turn["run_id"]] = {"status": "loading", "updated_at": "after", "sequence": 0}
+    client.get(prefix + f"/turns/{turn['run_id']}/state")
+    repaired = store.get(session["id"])["turns"][0]
+    assert repaired["status"] == "loading" and "error" not in repaired

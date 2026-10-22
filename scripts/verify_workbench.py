@@ -23,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--url")
     parser.add_argument("--output", default=".private/workbench-verification.json")
+    parser.add_argument("--resume-session")
     args = parser.parse_args()
     url = (
         args.url
@@ -41,7 +42,11 @@ def main():
         assert "HttpOnly" in response.headers["set-cookie"]
         assert "Secure" in response.headers["set-cookie"]
         assert client.get("/api/config").status_code == 200
-        response = client.post("/api/sessions", json={"system": "Answer briefly and accurately."})
+        response = (
+            client.get(f"/api/sessions/{args.resume_session}")
+            if args.resume_session
+            else client.post("/api/sessions", json={"system": "Answer briefly and accurately."})
+        )
         response.raise_for_status()
         session = response.json()
         receipt["session_id"] = session["id"]
@@ -59,19 +64,26 @@ def main():
                     json={"system": "Answer with the number only. Be accurate."},
                 )
                 response.raise_for_status()
-            response = client.post(
-                f"/api/sessions/{session['id']}/turns",
-                json={
-                    "text": text,
-                    "request_id": uuid.uuid4().hex,
-                    "generation": {"max_new_tokens": 128, "temperature": 0, "seed": 19},
-                    "reasoning_effort": effort,
-                    "layers": [10, 30, 50],
-                    "expert_norms": True,
-                },
+            response = (
+                client.post(
+                    f"/api/sessions/{session['id']}/turns",
+                    json={
+                        "text": text,
+                        "request_id": uuid.uuid4().hex,
+                        "generation": {"max_new_tokens": 128, "temperature": 0, "seed": 19},
+                        "reasoning_effort": effort,
+                        "layers": [10, 30, 50],
+                        "expert_norms": True,
+                    },
+                )
+                if not (args.resume_session and i == 0)
+                else None
             )
-            response.raise_for_status()
-            turn = response.json()
+            if response is not None:
+                response.raise_for_status()
+                turn = response.json()
+            else:
+                turn = session["turns"][0]
             prefix = f"/api/sessions/{session['id']}/turns/{turn['run_id']}"
             deadline = time.monotonic() + 1800
             phases, steps, frames, last, log_time = set(), set(), 0, None, 0

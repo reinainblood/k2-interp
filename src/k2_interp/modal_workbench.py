@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import os
+import time
+from datetime import datetime
 from pathlib import Path
 
 import modal
@@ -54,11 +56,17 @@ def web():
 
         def state(self, checkpoint, turn):
             value = live.get("live:" + turn["run_id"], None)
-            if value is not None:
+            if value is not None and (
+                value["status"] in ("complete", "failed", "cancelled")
+                or time.time() - datetime.fromisoformat(value["updated_at"]).timestamp() < 60
+            ):
                 return value
             try:
                 artifacts.reload()
-                return latest_projection(Path("/artifacts"), checkpoint, turn["run_id"])
+                recovered = latest_projection(Path("/artifacts"), checkpoint, turn["run_id"])
+                if recovered["status"] in ("complete", "failed", "cancelled"):
+                    return recovered
+                value = recovered
             except FileNotFoundError:
                 pass
             # Surface dispatch/runtime failures even when telemetry never started.
@@ -68,6 +76,7 @@ def web():
                     from .telemetry import utc_now
 
                     return {
+                        **(value or {}),
                         "status": "complete",
                         "result": result,
                         "sequence": 0,
@@ -75,11 +84,12 @@ def web():
                         "run_id": turn["run_id"],
                     }
                 except (TimeoutError, modal.exception.TimeoutError):
-                    return None
+                    return value
                 except Exception as exc:
                     from .telemetry import utc_now
 
                     return {
+                        **(value or {}),
                         "status": "failed",
                         "sequence": 0,
                         "updated_at": utc_now(),

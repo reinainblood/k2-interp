@@ -55,6 +55,12 @@ def create_workbench(
     async def protect(request: Request, call_next):
         path = request.url.path
         if request.method not in ("GET", "HEAD"):
+            limit = 2048 if path == "/api/login" else 2_000_000
+            try:
+                if int(request.headers.get("content-length", "0")) > limit:
+                    return JSONResponse({"detail": "Request too large"}, status_code=413)
+            except ValueError:
+                return JSONResponse({"detail": "Invalid content length"}, status_code=400)
             origin = request.headers.get("origin")
             expected = f"{request.url.scheme}://{request.url.netloc}"
             if (origin and origin != expected) or request.headers.get("x-k2-intent") != "workbench":

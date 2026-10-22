@@ -61,17 +61,20 @@ class SessionStore:
         with self.lock:
             session = self.get(session_id)
             turn = next(t for t in session["turns"] if t["run_id"] == run_id)
-            if state["status"] in TERMINAL and (
-                turn["status"] != state["status"]
-                or (state["status"] == "complete" and not turn.get("assistant"))
+            if state["status"] != turn["status"] or (
+                state["status"] == "complete" and not turn.get("assistant")
             ):
                 turn["status"] = state["status"]
-                turn["finished_at"] = state["updated_at"]
-                turn["assistant"] = state.get("result", {}).get("assistant_message")
-                turn["error"] = state.get("error")
-                turn["finish_reason"] = (
-                    state.get("result", {}).get("result", {}).get("finish_reason")
-                )
+                if state["status"] in TERMINAL:
+                    turn["finished_at"] = state["updated_at"]
+                    turn["assistant"] = state.get("result", {}).get("assistant_message")
+                    turn["error"] = state.get("error")
+                    turn["finish_reason"] = (
+                        state.get("result", {}).get("result", {}).get("finish_reason")
+                    )
+                else:
+                    turn.pop("error", None)
+                    turn.pop("finished_at", None)
                 self.save(session)
 
     def history(self, session):

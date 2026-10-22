@@ -28,11 +28,13 @@ export function useWorkbench() {
     localStorage.setItem("k2-session", id);
   }, []);
   const boot = useCallback(async () => {
-    const config = await api<{ checkpoints: string[] }>("/config");
+    const [config, list] = await Promise.all([
+      api<{ checkpoints: string[] }>("/config"),
+      api<SessionItem[]>("/sessions"),
+    ]);
     setCheckpoints(config.checkpoints);
     setAuthorized(true);
     setConnection("Connected");
-    const list = await api<SessionItem[]>("/sessions");
     setSessions(list);
     const remembered = localStorage.getItem("k2-session");
     const id = list.find((s) => s.id === remembered)?.id || list[0]?.id;
@@ -71,10 +73,16 @@ export function useWorkbench() {
       setConnection("Connected");
       if (terminal(value.status)) {
         source.current?.close();
-        void api<Session>(`/sessions/${session.id}`).then((s) => {
-          if (!cancelled) setSession(s);
+        void api<Session>(`/sessions/${session.id}`)
+          .then((s) => {
+            if (!cancelled) setSession(s);
+          })
+          .catch((e) => {
+            if (!cancelled) setError(String(e));
+          });
+        void refreshSessions().catch((e) => {
+          if (!cancelled) setError(String(e));
         });
-        void refreshSessions();
       }
     };
     void api<Frame>(url + "/state")
@@ -96,6 +104,19 @@ export function useWorkbench() {
       source.current?.close();
     };
   }, [session?.id, runId, refreshSessions]);
+  const hasActiveTurn = !!session?.turns.some((turn) => !terminal(turn.status));
+  useEffect(() => {
+    if (!session || !hasActiveTurn) return;
+    const id = session.id;
+    const timer = setInterval(() => {
+      void api<Session>(`/sessions/${id}`)
+        .then((value) =>
+          setSession((current) => (current?.id === id ? value : current)),
+        )
+        .catch((e) => setError(String(e)));
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [session?.id, hasActiveTurn]);
   const create = async (checkpoint: string, system: string) => {
     const s = await api<Session>("/sessions", { checkpoint, system });
     setSession(s);
@@ -138,7 +159,11 @@ export function useWorkbench() {
     }
   };
   const cancel = async () => {
-    const active = session?.turns.find((t) => !terminal(t.status));
+    const active =
+      session?.turns.find((t) => !terminal(t.status)) ||
+      (frame && !terminal(frame.status)
+        ? session?.turns.find((t) => t.run_id === frame.run_id)
+        : undefined);
     if (session && active)
       await api(turnPath(session.id, active.run_id) + "/cancel", {});
   };

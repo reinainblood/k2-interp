@@ -181,6 +181,15 @@ export default function App() {
               {w.session?.checkpoint || "·"}
             </span>
             <span className="session-id">{w.session?.id.slice(-12) || ""}</span>
+            {w.session && (
+              <a
+                className="download-chat"
+                href={`/api/sessions/${w.session.id}/export`}
+                download
+              >
+                Chat ↓
+              </a>
+            )}
           </div>
           {w.error && (
             <div className="global-error" role="alert">

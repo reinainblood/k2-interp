@@ -27,7 +27,10 @@ export function Chat({
   const [error, setError] = useState("");
   const [autoScroll, setAutoScroll] = useState(true);
   const bottom = useRef<HTMLDivElement>(null);
-  const active = session?.turns.some((t) => !terminal(t.status)) || sending;
+  const active =
+    session?.turns.some((t) => !terminal(t.status)) ||
+    (frame && !terminal(frame.status)) ||
+    sending;
   useEffect(() => {
     if (autoScroll) bottom.current?.scrollIntoView({ block: "nearest" });
   }, [frame?.output_ids?.length, session?.turns.length, autoScroll]);
