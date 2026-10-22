@@ -9,7 +9,7 @@ from pathlib import Path
 
 import torch
 
-from .artifacts import TraceWriter
+from .artifacts import TraceWriter, file_hash
 from .hooks import NativeTrace
 from .schema import CaptureSpec, GenerationSpec, RunSpec, Sample, digest
 
@@ -53,6 +53,9 @@ class Runtime:
     def __init__(self, model, tokenizer, identity: dict, root: str | Path, commit=lambda: None):
         self.model, self.tokenizer, self.identity = model, tokenizer, dict(identity)
         self.root, self.commit = Path(root), commit
+        self.identity["runtime_source_sha256"] = digest(
+            {p.name: file_hash(p) for p in sorted(Path(__file__).parent.glob("*.py"))}
+        )
         self.device = model.get_input_embeddings().weight.device
         self.identity["packages"] = {
             p: importlib.metadata.version(p)

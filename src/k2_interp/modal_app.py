@@ -29,8 +29,13 @@ artifacts = modal.Volume.from_name(
 # Optional existing cache is read-only and must pass full shard hashes before reuse.
 reuse_volume = os.environ.get("K2_REUSE_VOLUME", "")
 legacy_mounts = (
-    {"/legacy": modal.Volume.from_name(reuse_volume, environment_name=ENVIRONMENT).with_mount_options(read_only=True)}
-    if reuse_volume else {}
+    {
+        "/legacy": modal.Volume.from_name(
+            reuse_volume, environment_name=ENVIRONMENT
+        ).with_mount_options(read_only=True)
+    }
+    if reuse_volume
+    else {}
 )
 
 image = (
@@ -45,6 +50,8 @@ image = (
             "HF_HOME": "/tmp/hf",
             "TOKENIZERS_PARALLELISM": "false",
             "K2_CHECKPOINT": CHECKPOINT,
+            "K2_REUSE_VOLUME": reuse_volume,
+            "K2_IDLE_SECONDS": os.environ.get("K2_IDLE_SECONDS", "300"),
             "K2_INTERP_CODE_REVISION": os.environ.get("K2_INTERP_CODE_REVISION", "unrecorded"),
         }
     )
@@ -188,6 +195,59 @@ def train_dictionary(config: dict):
 
     artifacts.reload()
     result = train_from_config(config, root="/artifacts", commit=artifacts.commit)
+    return result
+
+
+@app.function(
+    image=image,
+    cpu=8,
+    memory=65536,
+    timeout=3600,
+    max_containers=1,
+    volumes={"/artifacts": artifacts},
+)
+def analyze(request: dict):
+    from k2_interp.analysis import feature_report, localize, router_comparison
+    from k2_interp.causal import private_path
+    from k2_interp.datasets import build_dataset
+
+    artifacts.reload()
+    args = dict(request)
+    operation = args.pop("operation")
+    if operation == "dataset":
+        views = [{**v, "run": str(private_path("/artifacts", v["run"]))} for v in args["views"]]
+        result = build_dataset(views, private_path("/artifacts", args["output"]))
+    elif operation == "localize":
+        result = localize(
+            private_path("/artifacts", args["run"]),
+            args["pairs"],
+            args["sites"],
+            private_path("/artifacts", args["output"]),
+            args.get("seed", 0),
+        )
+    elif operation == "compare_routes":
+        result = router_comparison(
+            private_path("/artifacts", args["run_a"]),
+            private_path("/artifacts", args["run_b"]),
+            args["layers"],
+            private_path("/artifacts", args["output"]),
+        )
+    elif operation == "features":
+        result = feature_report(
+            private_path("/artifacts", args["dictionary"]),
+            private_path("/artifacts", args["dataset"]),
+            private_path("/artifacts", args["output"]),
+            args.get("top_n", 10),
+        )
+    elif operation == "evaluate":
+        from k2_interp.evaluation import summarize_run
+
+        result = summarize_run(
+            private_path("/artifacts", args["run"]), private_path("/artifacts", args["output"])
+        )
+    else:
+        raise ValueError("Unknown CPU analysis operation")
+    artifacts.commit()
     return result
 
 

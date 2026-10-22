@@ -101,6 +101,20 @@ def parser():
     features.add_argument("dataset")
     features.add_argument("--output", required=True)
     sub.add_parser("status", help="List only this runtime's FDR apps without loading models")
+    analyze = sub.add_parser(
+        "analyze", help="Run dataset/localization/comparison jobs beside private traces"
+    )
+    analyze.add_argument("request")
+    analyze.add_argument("--checkpoint", choices=CHECKPOINTS, default="sft_3_1500")
+    analyze.add_argument("--detach", action="store_true")
+    download = sub.add_parser("download", help="Download a private artifact directory from FDR")
+    download.add_argument("remote_path")
+    download.add_argument("output")
+    evaluate = sub.add_parser(
+        "evaluate", help="Summarize completed runs with explicit optional exact-match scoring"
+    )
+    evaluate.add_argument("run")
+    evaluate.add_argument("--output", required=True)
     return p
 
 
@@ -251,6 +265,34 @@ def main(argv=None):
             )
         )
         emit([a for a in apps if a["description"].startswith("k2-interp-")])
+    elif args.command == "analyze":
+        import modal
+
+        method = modal.Function.from_name(
+            app_name(args.checkpoint), "analyze", environment_name="FDR"
+        )
+        emit(invoke(method, [json_file(args.request)], args.detach))
+    elif args.command == "download":
+        if ".." in Path(args.remote_path).parts:
+            raise ValueError("Invalid artifact path")
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "modal",
+                "volume",
+                "get",
+                "--env=FDR",
+                "k2-interp-artifacts",
+                args.remote_path,
+                args.output,
+            ],
+            check=True,
+        )
+    elif args.command == "evaluate":
+        from .evaluation import summarize_run
+
+        emit(summarize_run(args.run, args.output))
 
 
 if __name__ == "__main__":
