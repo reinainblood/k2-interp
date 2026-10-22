@@ -11,7 +11,7 @@ import modal
 
 def login_ticket():
     ticket = secrets.token_urlsafe(32)
-    channel = modal.Dict.from_name("k2-interp-live", environment_name="FDR")
+    channel = modal.Dict.from_name("k2-interp-live", environment_name="FDR", create_if_missing=True)
     channel.put(
         "ticket:" + hashlib.sha256(ticket.encode()).hexdigest(), {"expires": time.time() + 90}
     )

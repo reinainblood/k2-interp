@@ -61,7 +61,10 @@ class SessionStore:
         with self.lock:
             session = self.get(session_id)
             turn = next(t for t in session["turns"] if t["run_id"] == run_id)
-            if state["status"] in TERMINAL and turn["status"] not in TERMINAL:
+            if state["status"] in TERMINAL and (
+                turn["status"] != state["status"]
+                or (state["status"] == "complete" and not turn.get("assistant"))
+            ):
                 turn["status"] = state["status"]
                 turn["finished_at"] = state["updated_at"]
                 turn["assistant"] = state.get("result", {}).get("assistant_message")

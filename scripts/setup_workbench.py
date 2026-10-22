@@ -6,6 +6,7 @@ import modal
 
 
 def main():
+    modal.Dict.objects.create("k2-interp-live", environment_name="FDR", allow_existing=True)
     names = {item.name for item in modal.Secret.objects.list(environment_name="FDR")}
     if "k2-interp-workbench-auth" in names:
         print("Workbench auth secret already exists in FDR; preserved.")

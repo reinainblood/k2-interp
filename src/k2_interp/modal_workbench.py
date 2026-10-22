@@ -74,7 +74,7 @@ def web():
                         "updated_at": utc_now(),
                         "run_id": turn["run_id"],
                     }
-                except modal.exception.TimeoutError:
+                except (TimeoutError, modal.exception.TimeoutError):
                     return None
                 except Exception as exc:
                     from .telemetry import utc_now
