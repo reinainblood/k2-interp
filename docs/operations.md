@@ -24,6 +24,16 @@ SDK calls use existing Modal credentials. The HTTP API requires `Modal-Key` and
 health means the API is available, not that model weights are loaded. The API accepts
 structured requests and does not execute client-supplied Python.
 
+Proxy credentials (`wk-`/`ws-`) are different from SDK API credentials (`ak-`/`as-`).
+Use an existing FDR-scoped proxy token through `MODAL_PROXY_TOKEN_ID` and
+`MODAL_PROXY_TOKEN_SECRET`, or a private credential file with `token_id` and
+`token_secret` fields. `scripts/verify_gateway.py` tests anonymous denial and
+authenticated access without printing credentials; `--chat` additionally runs two
+bounded turns. `scripts/configure_proxy.py` can create an FDR-scoped token when
+workspace capacity permits and saves it with mode 0600 under `.private/`.
+It never deletes an existing token to make room. CLI/SDK chat and capture do not
+require proxy credentials.
+
 `/v1/chat/completions` supports non-streaming responses with parsed assistant content
 and reasoning. Raw output remains private. `/runs` returns a call ID, polled with
 `k2-interp call` and existing Modal credentials.
