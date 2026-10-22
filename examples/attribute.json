@@ -1,0 +1,8 @@
+{
+  "run_id": "example-attribution",
+  "sample": {"id": "france", "text": "The capital of France is", "continuation": " Paris."},
+  "nodes": [
+    {"id": "layer30-feature0-token0", "layer": 30, "site": "resid_post", "dictionary": "dictionaries/example-sae", "feature": 0, "position": 0}
+  ],
+  "max_context": 512
+}

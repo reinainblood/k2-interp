@@ -1,0 +1,10 @@
+{
+  "run_id": "example-feature-graph",
+  "sample": {"id": "france", "text": "The capital of France is", "continuation": " Paris."},
+  "nodes": [
+    {"id": "layer30-feature0-token0", "layer": 30, "site": "resid_post", "dictionary": "dictionaries/example-sae", "feature": 0, "position": 0, "operation": "scale"}
+  ],
+  "factors": [0.0, 0.5, 1.0, 2.0],
+  "max_context": 512,
+  "max_seconds": 900
+}

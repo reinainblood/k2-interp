@@ -1,0 +1,8 @@
+{
+  "run_id": "example-reconstruction-fidelity",
+  "sample": {"id": "france", "text": "The capital of France is", "continuation": " Paris."},
+  "dictionary": "dictionaries/example-sae",
+  "layer": 30,
+  "site": "resid_post",
+  "max_context": 512
+}

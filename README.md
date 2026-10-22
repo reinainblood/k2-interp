@@ -116,12 +116,19 @@ CPU analysis and dictionary training can run beside the private traces:
 uv run k2-interp analyze examples/dataset-sae.json
 uv run k2-interp train examples/train-sae.json --remote --detach
 uv run k2-interp intervene examples/intervene.json --checkpoint sft_3_1500
+uv run k2-interp fidelity examples/fidelity.json --checkpoint sft_3_1500
+uv run k2-interp attribute examples/attribute.json --checkpoint sft_3_1500
+uv run k2-interp graph examples/feature-graph.json --checkpoint sft_3_1500
 ```
 
 The factual example exercises software plumbing; it is far too small for scientific
 dictionary training. Use broad training data and independent prompt families for
 validation. See [protocol](docs/protocol.md), [artifacts](docs/artifacts.md), and
 [operations](docs/operations.md).
+
+The feature examples deliberately select an arbitrary latent/token to demonstrate
+the API. Select actual candidate latents and positions from your discovery data;
+latent 0 and token 0 have no preassigned semantic meaning.
 
 ## Checkpoints and reproducibility
 
