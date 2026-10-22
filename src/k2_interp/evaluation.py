@@ -35,7 +35,11 @@ def summarize_run(run: str | Path, output: str | Path):
             "continuation_logprob_mean": result["continuation_logprob_mean"],
         }
         if "expected_exact" in sample["labels"]:
-            final = result["output_text"].split("</think>", 1)[-1].strip()
+            final = (
+                result.get("assistant_message", {})
+                .get("content", result["output_text"].split("</think>", 1)[-1])
+                .strip()
+            )
             row["exact_match"] = final == str(sample["labels"]["expected_exact"]).strip()
         rows.append(row)
     summary = {

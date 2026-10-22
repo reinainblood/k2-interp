@@ -49,6 +49,28 @@ def sample_token(logits: torch.Tensor, spec: GenerationSpec, generator) -> int:
     return int(torch.multinomial(scores.softmax(-1), 1, generator=generator).item())
 
 
+def response_message(tokenizer, generation_config, prompt: list[int], generated: list[int]) -> dict:
+    """Parse native thinking delimiters while preserving exact raw output elsewhere."""
+    eos = generation_config.eos_token_id
+    eos_ids = {eos} if isinstance(eos, int) else set(eos or [])
+    content_ids = list(generated)
+    while content_ids and content_ids[-1] in eos_ids:
+        content_ids.pop()
+    text = tokenizer.decode(content_ids, skip_special_tokens=False)
+    reasoning = ""
+    if "</think>" in text:
+        reasoning, text = text.split("</think>", 1)
+        reasoning = reasoning.removeprefix("<think>").strip()
+    elif text.lstrip().startswith("<think>") or tokenizer.decode(
+        prompt, skip_special_tokens=False
+    ).rstrip().endswith("<think>"):
+        reasoning, text = text.removeprefix("<think>").strip(), ""
+    message = {"role": "assistant", "content": text.strip()}
+    if reasoning:
+        message["reasoning_content"] = reasoning
+    return message
+
+
 class Runtime:
     def __init__(self, model, tokenizer, identity: dict, root: str | Path, commit=lambda: None):
         self.model, self.tokenizer, self.identity = model, tokenizer, dict(identity)
@@ -157,6 +179,9 @@ class Runtime:
             "all_token_ids": all_ids,
             "token_text": self.tokenizer.convert_ids_to_tokens(all_ids),
             "output_text": self.tokenizer.decode(generated, skip_special_tokens=False),
+            "assistant_message": response_message(
+                self.tokenizer, self.model.generation_config, prompt, generated
+            ),
             "output_logprobs": scores,
             "continuation_logprob_sum": sum(scores) if continuation else None,
             "continuation_logprob_mean": sum(scores) / len(scores) if continuation else None,
@@ -174,6 +199,7 @@ class Runtime:
         temperature=0,
         top_p=1,
         chat_template_kwargs=None,
+        max_context=8192,
         capture: CaptureSpec | None = None,
         run_id: str,
     ):
@@ -191,21 +217,10 @@ class Runtime:
                 max_new_tokens=max_new_tokens, seed=seed, temperature=temperature, top_p=top_p
             ),
             capture=capture or CaptureSpec(router=False, layers=[]),
+            max_context=max_context,
         )
         receipt = self.run(spec)
         sample = receipt["samples"]["chat"]
         result = json.loads((self.root / run_id / sample["attempt"] / "result.json").read_text())
-        text = result["output_text"]
-        eos = self.model.generation_config.eos_token_id
-        for token in [eos] if isinstance(eos, int) else (eos or []):
-            marker = self.tokenizer.decode([token], skip_special_tokens=False)
-            if marker and text.endswith(marker):
-                text = text[: -len(marker)]
-        reasoning = ""
-        if "</think>" in text:
-            reasoning, text = text.split("</think>", 1)
-            reasoning = reasoning.removeprefix("<think>").strip()
-        message = {"role": "assistant", "content": text.strip()}
-        if reasoning:
-            message["reasoning_content"] = reasoning
+        message = result["assistant_message"]
         return {"result": result, "receipt": receipt, "assistant_message": message}

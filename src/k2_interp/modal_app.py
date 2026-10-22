@@ -310,6 +310,7 @@ def api():
                 "top_p": request.top_p,
                 "seed": request.seed,
                 "chat_template_kwargs": request.chat_template_kwargs,
+                "max_context": request.max_context,
             }
         )
         result = response["result"]

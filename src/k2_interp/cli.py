@@ -65,6 +65,7 @@ def parser():
     chat.add_argument("--checkpoint", choices=CHECKPOINTS, default="sft_3_1500")
     chat.add_argument("--system-file")
     chat.add_argument("--max-new-tokens", type=int, default=512)
+    chat.add_argument("--max-context", type=int, default=8192)
     smoke = sub.add_parser(
         "smoke", help="Run bounded full-model parity/capture/intervention checks"
     )
@@ -215,6 +216,7 @@ def main(argv=None):
                     "messages": messages,
                     "run_id": "chat-" + uuid.uuid4().hex,
                     "max_new_tokens": args.max_new_tokens,
+                    "max_context": args.max_context,
                 }
             )
             message = result["assistant_message"]

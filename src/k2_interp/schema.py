@@ -117,6 +117,7 @@ class ChatRequest(Contract):
     top_p: float = Field(default=1, gt=0, le=1)
     seed: int = Field(default=0, ge=0)
     stream: bool = False
+    max_context: int = Field(default=8192, ge=2, le=524288)
     chat_template_kwargs: dict[str, Any] = Field(
         default_factory=lambda: {"reasoning_effort": "high"}
     )

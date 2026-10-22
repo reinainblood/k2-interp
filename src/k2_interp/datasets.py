@@ -83,6 +83,8 @@ def build_dataset(views: list[dict], output: str | Path) -> dict:
             r["sample"]["split"] != split or r["sample"]["template_group"] != group for r in results
         ):
             raise ValueError("Split/group metadata differs across views")
+        if any(r["sample"]["labels"] != sample["labels"] for r in results):
+            raise ValueError("Sample labels differ across checkpoint views")
         tensors = {
             v["name"]: torch.stack([r[sample_id]["rows"][p] for p in positions])
             for v, r in zip(views, loaded, strict=True)

@@ -1,3 +1,4 @@
+import copy
 import json
 import time
 
@@ -11,9 +12,10 @@ from k2_interp.runtime import Runtime
 from k2_interp.schema import CaptureSpec, GenerationSpec, Intervention, RunSpec, Sample
 
 
-def test_native_router_semantics_and_identity(native_model):
-    block = native_model.model.layers[1].mlp
-    x = torch.randn(1, 7, 16)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.bfloat16])
+def test_native_router_semantics_and_identity(native_model, dtype):
+    block = copy.deepcopy(native_model.model.layers[1].mlp).to(dtype)
+    x = torch.randn(1, 7, 16, dtype=dtype)
     original, logits = block(x)
     actual, other = sparse_forward(block, x, lambda site, t: t)
     torch.testing.assert_close(original, actual, rtol=0, atol=0)
