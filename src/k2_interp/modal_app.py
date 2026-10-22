@@ -153,8 +153,12 @@ class NativeWorker:
 
     @modal.method()
     def chat(self, request: dict):
+        from k2_interp.schema import CaptureSpec
+
         self.ensure_loaded()
         artifacts.reload()
+        if isinstance(request.get("capture"), dict):
+            request = {**request, "capture": CaptureSpec.model_validate(request["capture"])}
         return self.runtime.chat(**request)
 
     @modal.method()
@@ -341,18 +345,19 @@ def api():
             raise HTTPException(400, "Checkpoint mismatch")
         await preflight.remote.aio()
         run_id = "chat-" + uuid.uuid4().hex
-        response = await NativeWorker().chat.remote.aio(
-            {
-                "messages": request.messages,
-                "run_id": run_id,
-                "max_new_tokens": request.max_tokens,
-                "temperature": request.temperature,
-                "top_p": request.top_p,
-                "seed": request.seed,
-                "chat_template_kwargs": request.chat_template_kwargs,
-                "max_context": request.max_context,
-            }
-        )
+        payload = {
+            "messages": request.messages,
+            "run_id": run_id,
+            "max_new_tokens": request.max_tokens,
+            "temperature": request.temperature,
+            "top_p": request.top_p,
+            "seed": request.seed,
+            "chat_template_kwargs": request.chat_template_kwargs,
+            "max_context": request.max_context,
+        }
+        if request.capture is not None:
+            payload["capture"] = request.capture.model_dump()
+        response = await NativeWorker().chat.remote.aio(payload)
         result = response["result"]
         return {
             "id": run_id,
@@ -371,7 +376,18 @@ def api():
                 "completion_tokens": len(result["output_ids"]),
                 "total_tokens": len(result["all_token_ids"]),
             },
-            "k2_interp": {"revision": CHECKPOINTS[CHECKPOINT], "run_id": run_id},
+            # Exact token identity of this turn, so a client can freeze the
+            # trajectory and replay it teacher-forced on any checkpoint later.
+            "k2_interp": {
+                "revision": CHECKPOINTS[CHECKPOINT],
+                "run_id": run_id,
+                "captured": request.capture is not None,
+                "input_ids": result["input_ids"],
+                "output_ids": result["output_ids"],
+                "output_logprobs": result.get("output_logprobs", []),
+                "finish_reason": result["finish_reason"],
+                "mode": result.get("mode", "generation"),
+            },
         }
 
     return web

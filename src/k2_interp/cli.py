@@ -120,6 +120,35 @@ def parser():
     )
     evaluate.add_argument("run")
     evaluate.add_argument("--output", required=True)
+    hsum = sub.add_parser(
+        "harbor-summary", help="Outcome counts and lengths for a Harbor job of K2Agent trials"
+    )
+    hsum.add_argument("job")
+    replay = sub.add_parser(
+        "harbor-replay",
+        help="Turn a Harbor job into teacher-forced capture RunSpecs (stages b1/b2/b3)",
+    )
+    replay.add_argument("job")
+    replay.add_argument("--stage", choices=["b1", "b2", "b3"], required=True)
+    replay.add_argument("--checkpoints", nargs="+", default=["sft_3_1500"])
+    replay.add_argument("--run-prefix", required=True, help="e.g. impasse-a0; no slashes")
+    replay.add_argument("--output", required=True, help="Directory for the RunSpec JSON files")
+    replay.add_argument("--window", type=int, default=256)
+    replay.add_argument("--layers", type=int, nargs="*")
+    replay.add_argument("--sites", nargs="*")
+    replay.add_argument("--max-bytes", type=int, default=2_000_000_000)
+    replay.add_argument("--max-seconds", type=int, default=86400)
+    replay.add_argument("--max-context", type=int, default=262144)
+    replay.add_argument("--per-trial", action="store_true")
+    replay.add_argument(
+        "--outcomes", nargs="*", help="Keep only these labels (bailed/wrong/pushed)"
+    )
+    replay.add_argument("--submit", action="store_true", help="Also submit each spec detached")
+    rfeat = sub.add_parser(
+        "router-features", help="Flatten a router capture run into per-token JSONL + npz"
+    )
+    rfeat.add_argument("run", help="Downloaded run directory containing manifest.json")
+    rfeat.add_argument("--output", required=True, help="Output stem; .jsonl and .npz are added")
     return p
 
 
@@ -313,6 +342,49 @@ def main(argv=None):
         from .evaluation import summarize_run
 
         emit(summarize_run(args.run, args.output))
+    elif args.command == "harbor-summary":
+        from .harbor_replay import summarize
+
+        emit(summarize(args.job))
+    elif args.command == "harbor-replay":
+        from .harbor_replay import build_specs, write_specs
+
+        specs = build_specs(
+            args.job,
+            stage=args.stage,
+            checkpoints=panel(args.checkpoints),
+            run_prefix=args.run_prefix,
+            window=args.window,
+            layers=args.layers,
+            sites=args.sites,
+            max_bytes=args.max_bytes,
+            max_seconds=args.max_seconds,
+            max_context=args.max_context,
+            per_trial=args.per_trial,
+            outcomes=args.outcomes,
+        )
+        paths = write_specs(specs, args.output)
+        submitted = []
+        if args.submit:
+            for spec in specs:
+                submitted.append(
+                    {
+                        "checkpoint": spec.checkpoint,
+                        "run_id": spec.run_id,
+                        **invoke(remote(spec.checkpoint).run, [spec.model_dump()], True),
+                    }
+                )
+        emit(
+            {
+                "specs": [str(p) for p in paths],
+                "samples": sum(len(s.samples) for s in specs),
+                "submitted": submitted,
+            }
+        )
+    elif args.command == "router-features":
+        from .features import write_router_features
+
+        emit(write_router_features(args.run, args.output))
 
 
 if __name__ == "__main__":

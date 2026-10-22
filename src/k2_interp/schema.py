@@ -11,6 +11,17 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 SCHEMA_VERSION = "k2-interp/1"
 SITES = ("resid_pre", "attn_out", "resid_mid", "moe_in", "moe_out", "shared_out", "resid_post")
+ROUTER_FIELDS = (
+    "router_logits",
+    "router_scores",
+    "selection_scores",
+    "expert_ids",
+    "expert_weights",
+    "routing_margin",
+    "router_entropy",
+)
+# Routing summary without the three 192-wide score vectors: ~6 KB/token across 58 layers.
+ROUTER_SUMMARY_FIELDS = ("expert_ids", "expert_weights", "routing_margin", "router_entropy")
 
 
 def digest(value: Any) -> str:
@@ -31,6 +42,9 @@ class Contract(BaseModel):
 
 class CaptureSpec(Contract):
     router: bool = True
+    # None keeps every router field. A subset (e.g. ROUTER_SUMMARY_FIELDS) drops the
+    # 192-wide score vectors so whole-trajectory router traces stay small.
+    router_fields: list[str] | None = None
     layers: list[int] = Field(default_factory=list)
     sites: list[str] = Field(default_factory=lambda: ["resid_post"])
     positions: list[int] | None = None
@@ -45,6 +59,12 @@ class CaptureSpec(Contract):
     def validate_sites(self):
         if any(s not in SITES for s in self.sites):
             raise ValueError(f"sites must be drawn from {SITES}")
+        if self.router_fields is not None and (
+            not self.router_fields
+            or len(set(self.router_fields)) != len(self.router_fields)
+            or any(f not in ROUTER_FIELDS for f in self.router_fields)
+        ):
+            raise ValueError(f"router_fields must be a unique subset of {ROUTER_FIELDS}")
         if len(set(self.layers)) != len(self.layers) or any(i < 0 for i in self.layers):
             raise ValueError("layers must be unique, nonnegative indices")
         if self.positions is not None and (
@@ -127,6 +147,9 @@ class ChatRequest(Contract):
     chat_template_kwargs: dict[str, Any] = Field(
         default_factory=lambda: {"reasoning_effort": "high"}
     )
+    # Optional live capture for this turn. The response's `k2_interp` block then
+    # names the run_id holding the trace. Omit for plain, capture-free chat.
+    capture: CaptureSpec | None = None
 
 
 class Intervention(Contract):
