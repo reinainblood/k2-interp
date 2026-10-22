@@ -22,8 +22,11 @@ def token_inputs(tokenizer, sample: Sample) -> tuple[list[int], list[int]]:
             sample.messages,
             tokenize=True,
             add_generation_prompt=True,
+            return_dict=False,
             **sample.chat_template_kwargs,
         )
+        if isinstance(prompt, dict) or hasattr(prompt, "data"):
+            prompt = prompt["input_ids"]
     else:
         prompt = tokenizer.encode(sample.text, add_special_tokens=True)
     continuation = sample.continuation_ids or (
@@ -33,6 +36,8 @@ def token_inputs(tokenizer, sample: Sample) -> tuple[list[int], list[int]]:
     )
     if not prompt:
         raise ValueError("Tokenized prompt is empty")
+    if not all(isinstance(token, int) for token in prompt + continuation):
+        raise ValueError("Tokenizer must return a flat integer token-ID sequence")
     return list(prompt), list(continuation)
 
 

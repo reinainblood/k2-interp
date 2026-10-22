@@ -84,3 +84,21 @@ def test_actual_ifm_template_roundtrip(native_tokenizer):
         assert incomplete["content"] == "" and incomplete["reasoning_content"] == "Thinking"
     empty = {"role": "assistant", "content": "Paris", "reasoning_content": ""}
     tok.apply_chat_template(messages + [empty], tokenize=True)
+
+
+def test_native_chat_token_ids_are_flat_integers(native_tokenizer):
+    from k2_interp.runtime import token_inputs
+
+    sample = Sample(id="chat", messages=[{"role": "user", "content": "Hello."}])
+    ids, continuation = token_inputs(native_tokenizer, sample)
+    assert ids and not continuation and all(isinstance(i, int) for i in ids)
+    expected = native_tokenizer.apply_chat_template(
+        sample.messages,
+        tokenize=True,
+        add_generation_prompt=True,
+        return_dict=False,
+        reasoning_effort="high",
+    )
+    assert ids == expected
+    with pytest.raises(ValueError, match="return-format"):
+        Sample(id="chat", messages=sample.messages, chat_template_kwargs={"return_dict": True})

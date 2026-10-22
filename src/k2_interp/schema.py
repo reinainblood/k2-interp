@@ -76,6 +76,10 @@ class Sample(Contract):
     @model_validator(mode="after")
     def validate_input(self):
         identifier(self.id)
+        if {"tokenize", "add_generation_prompt", "return_dict", "return_tensors"}.intersection(
+            self.chat_template_kwargs
+        ):
+            raise ValueError("Tokenization/return-format options are controlled by the runtime")
         if sum(x is not None for x in (self.text, self.messages, self.input_ids)) != 1:
             raise ValueError("Supply exactly one of text, messages, input_ids")
         if self.continuation is not None and self.continuation_ids is not None:
