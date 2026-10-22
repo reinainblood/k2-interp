@@ -9,6 +9,16 @@ afterEach(cleanup);
 
 describe("literal data views", () => {
   it("reveals a bookmarked token outside the current token window", () => {
+    const geometry = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        return new DOMRect(
+          0,
+          this.classList.contains("token") ? 500 : 0,
+          100,
+          20,
+        );
+      });
     const frame = {
       run_id: "test",
       status: "complete",
@@ -17,7 +27,7 @@ describe("literal data views", () => {
       input_tokens: 400,
       input_ids: Array.from({ length: 400 }, (_, i) => i),
     };
-    const { rerender } = render(
+    const { rerender, container } = render(
       <TokenStrip
         frame={frame}
         selected={220}
@@ -26,6 +36,9 @@ describe("literal data views", () => {
         onFollow={vi.fn()}
       />,
     );
+    const pane = container.querySelector(".token-list") as HTMLDivElement;
+    expect(pane.scrollTop).toBeGreaterThan(0);
+    pane.scrollTop = 0;
     rerender(
       <TokenStrip
         frame={frame}
@@ -36,10 +49,10 @@ describe("literal data views", () => {
       />,
     );
     expect(
-      screen
-        .getByTitle("p10 / ID 10 / t10")
-        .getAttribute("aria-pressed"),
+      screen.getByTitle("p10 / ID 10 / t10").getAttribute("aria-pressed"),
     ).toBe("true");
+    expect(pane.scrollTop).toBeGreaterThan(0);
+    geometry.mockRestore();
   });
   it("distinguishes uncollected expert outputs from measured zero", () => {
     render(

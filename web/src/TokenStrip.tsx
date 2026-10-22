@@ -39,7 +39,7 @@ export function TokenStrip({
       if (delta < 0 || delta + token.offsetHeight > list.clientHeight)
         list.scrollTop += delta - 24;
     }
-  }, [selected]);
+  }, [selected, windowStart]);
   const start = Math.min(windowStart, Math.max(0, tokens.length - 1));
   const matches = query
     ? tokens.flatMap((text, p) =>
