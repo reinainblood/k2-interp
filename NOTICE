@@ -1,0 +1,13 @@
+K2 Interp
+Copyright 2026 Kirsten Ruge
+
+This project targets IFM/K2-Horizon-375B-A23B, released by the Institute of
+Foundation Models. It is an independent research tool, not an official IFM product.
+
+The router calculation and intervention reference forward in routing.py follow
+the Apache-2.0 K2HorizonSparseMoeBlock implementation distributed by IFM, derived
+from the Qwen/Hugging Face implementation. Upstream notices identify the Qwen team,
+Alibaba Group, and HuggingFace Inc. (Copyright 2025).
+
+Weights and upstream Python source are downloaded at immutable revisions and are
+not redistributed in this repository.

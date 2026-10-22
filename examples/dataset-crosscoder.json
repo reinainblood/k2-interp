@@ -1,0 +1,9 @@
+{
+  "operation": "dataset", "output": "comparisons/mid4-sft3/dataset",
+  "views": [
+    {"name": "input_mid4", "run": "mid_4_6000/example-facts", "site": "layers.30.resid_post", "role": "input"},
+    {"name": "input_sft3", "run": "sft_3_1500/example-facts", "site": "layers.30.resid_post", "role": "input"},
+    {"name": "target_mid4", "run": "mid_4_6000/example-facts", "site": "layers.30.resid_post", "role": "target"},
+    {"name": "target_sft3", "run": "sft_3_1500/example-facts", "site": "layers.30.resid_post", "role": "target"}
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "operation": "dataset", "output": "sft_3_1500/datasets/example-transcoder",
+  "views": [
+    {"name": "input", "run": "sft_3_1500/example-facts", "site": "layers.30.moe_in", "role": "input"},
+    {"name": "target", "run": "sft_3_1500/example-facts", "site": "layers.30.moe_out", "role": "target"}
+  ]
+}

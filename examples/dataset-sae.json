@@ -1,0 +1,7 @@
+{
+  "operation": "dataset", "output": "sft_3_1500/datasets/example-sae",
+  "views": [
+    {"name": "input", "run": "sft_3_1500/example-facts", "site": "layers.30.resid_post", "role": "input"},
+    {"name": "target", "run": "sft_3_1500/example-facts", "site": "layers.30.resid_post", "role": "target"}
+  ]
+}

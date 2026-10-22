@@ -1,0 +1,5 @@
+{
+  "kind": "sae", "dataset": "sft_3_1500/datasets/example-sae", "output": "sft_3_1500/dictionaries/example-sae",
+  "width": 4096, "k": 32, "batch_size": 128, "epochs": 2, "learning_rate": 0.0003,
+  "max_steps": 100, "checkpoint_steps": 10, "device": "cuda", "seed": 42
+}

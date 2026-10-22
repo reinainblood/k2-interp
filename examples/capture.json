@@ -1,0 +1,11 @@
+{
+  "run_id": "example-facts", "checkpoint": "sft_3_1500", "max_context": 512, "max_seconds": 1800,
+  "capture": {"router": true, "layers": [3, 30, 60], "sites": ["resid_post", "moe_in", "moe_out"], "max_bytes": 200000000},
+  "generation": {"max_new_tokens": 0, "temperature": 0, "seed": 7},
+  "samples": [
+    {"id": "france", "text": "The capital of France is", "continuation": " Paris.", "split": "train", "template_group": "capital-statement", "labels": {"topic": "geography"}},
+    {"id": "italy", "text": "The capital of Italy is", "continuation": " Rome.", "split": "train", "template_group": "capital-statement", "labels": {"topic": "geography"}},
+    {"id": "germany", "text": "Germany has its capital in", "continuation": " Berlin.", "split": "validation", "template_group": "capital-in", "labels": {"topic": "geography"}}
+  ],
+  "protocol": {"purpose": "Software exercise only; insufficient corpus for scientific dictionary training"}
+}

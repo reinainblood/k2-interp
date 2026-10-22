@@ -1,0 +1,9 @@
+{
+  "run_id": "example-intervention",
+  "sample": {"id": "toy-token-sequence", "input_ids": [2, 3, 4], "continuation_ids": [5]},
+  "patch_sets": [
+    [{"layer": 60, "site": "resid_post", "positions": [2], "operation": "scale", "scale": 1.0}],
+    [{"layer": 60, "site": "resid_post", "positions": [2], "operation": "scale", "scale": 0.0}]
+  ],
+  "max_context": 128, "max_seconds": 600
+}
