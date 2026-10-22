@@ -104,6 +104,10 @@ def native_load(checkpoint: str, root: str | Path):
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
     path, lock = ready(checkpoint, root)
+    # HF 5.13's four materialization threads can contend in the CUDA driver's
+    # host-to-device transfer lock on large memory-mapped K2 shards. The reference
+    # path uses sequential transfers; this does not change any tensor values.
+    os.environ["HF_DEACTIVATE_ASYNC_LOAD"] = "1"
     if not torch.cuda.is_available() or torch.cuda.device_count() != 8:
         raise RuntimeError("Full K2 reference worker requires eight CUDA GPUs")
     # Layers stay whole. This is sequential model parallelism, not TP/EP.
@@ -134,6 +138,8 @@ def native_load(checkpoint: str, root: str | Path):
         "precision": "bfloat16",
         "attention": "sdpa",
         "parallelism": "native-whole-layer-model-parallel",
+        "weight_loading": "sequential",
+        "cuda_runtime": torch.version.cuda,
         "devices": {str(k): str(v) for k, v in model.hf_device_map.items()},
         "planned_weight_bytes_per_gpu": placement,
         "gpus": [torch.cuda.get_device_name(i) for i in range(8)],

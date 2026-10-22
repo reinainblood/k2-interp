@@ -17,6 +17,12 @@ GPU startup checks the receipt, sizes, and source/config hashes without rehashin
 758 GB. External modifications to a reused cache invalidate its immutability;
 use a dedicated snapshot for archival work.
 
+The reference loader validates an explicit GPU map from safetensors headers and
+uses sequential host-to-device transfers. Full-size testing exposed both unwanted
+disk placement in automatic balancing and CUDA transfer-lock contention with
+asynchronous materialization. Loading occurs inside the request, so a load failure
+does not trigger a lifecycle-hook retry loop.
+
 ## Access and privacy
 
 SDK calls use existing Modal credentials. The HTTP API requires `Modal-Key` and

@@ -50,6 +50,7 @@ image = (
         {
             "HF_HOME": "/tmp/hf",
             "TOKENIZERS_PARALLELISM": "false",
+            "HF_DEACTIVATE_ASYNC_LOAD": "1",
             "K2_CHECKPOINT": CHECKPOINT,
             "K2_REUSE_VOLUME": reuse_volume,
             "K2_IDLE_SECONDS": os.environ.get("K2_IDLE_SECONDS", "300"),
