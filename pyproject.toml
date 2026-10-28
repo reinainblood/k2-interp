@@ -22,10 +22,14 @@ dependencies = [
 
 [project.optional-dependencies]
 modal = ["modal==1.5.5", "fastapi>=0.115,<1", "uvicorn>=0.34,<1"]
+inspect = ["inspect-ai==0.3.286"]
 dev = ["pytest>=8,<10", "ruff>=0.12", "httpx>=0.28", "build>=1.2"]
 
 [project.scripts]
 k2-interp = "k2_interp.cli:main"
+
+[project.entry-points.inspect_ai]
+k2_interp = "k2_interp.inspect_registry"
 
 [project.urls]
 Repository = "https://github.com/reinainblood/k2-interp"
