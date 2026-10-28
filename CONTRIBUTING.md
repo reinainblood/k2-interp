@@ -6,7 +6,7 @@ native IFM implementation. Reduced random-weight models are appropriate for soft
 tests; scientific claims require the intended full checkpoint and protocol.
 
 ```sh
-uv sync --python 3.11 --extra dev --extra modal
+uv sync --python 3.11 --extra dev --extra modal --extra inspect
 uv run ruff check src tests
 uv run ruff format --check src tests
 uv run pytest -q

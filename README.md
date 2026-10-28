@@ -133,6 +133,10 @@ uv run k2-interp router-features artifacts/a0-b1-all --output features/a0-b1
 See [the Harbor guide](docs/harbor.md) for the text tool protocol, the trace files
 written per trial, the three capture stages, and the outcome labels.
 
+Inspect AI evals get the same traces through the `k2interp` model provider
+(`inspect eval task.py --model k2interp/sft_3_1500`, then `k2-interp inspect-replay`);
+see [the Inspect guide](docs/inspect.md).
+
 ## The analysis pipeline
 
 1. `run` captures router data at all sparse layers and selected residual/MLP sites.
