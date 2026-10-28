@@ -144,6 +144,27 @@ def parser():
         "--outcomes", nargs="*", help="Keep only these labels (bailed/wrong/pushed)"
     )
     replay.add_argument("--submit", action="store_true", help="Also submit each spec detached")
+    ireplay = sub.add_parser(
+        "inspect-replay",
+        help="Turn an Inspect .eval log (k2interp provider) into capture RunSpecs (b1/b2/b3)",
+    )
+    ireplay.add_argument("log", help="Inspect log file (.eval or .json)")
+    ireplay.add_argument("--stage", choices=["b1", "b2", "b3"], required=True)
+    ireplay.add_argument("--checkpoints", nargs="+", default=["sft_3_1500"])
+    ireplay.add_argument("--run-prefix", required=True, help="e.g. scicode-a0; no slashes")
+    ireplay.add_argument("--output", required=True, help="Directory for the RunSpec JSON files")
+    ireplay.add_argument("--scorer", help="Score name to label by (default: the first)")
+    ireplay.add_argument("--trace-dir", help="Provider trace_dir if frozen paths moved")
+    ireplay.add_argument("--window", type=int, default=256)
+    ireplay.add_argument("--layers", type=int, nargs="*")
+    ireplay.add_argument("--sites", nargs="*")
+    ireplay.add_argument("--max-bytes", type=int, default=2_000_000_000)
+    ireplay.add_argument("--max-seconds", type=int, default=86400)
+    ireplay.add_argument("--max-context", type=int, default=262144)
+    ireplay.add_argument("--per-trial", action="store_true")
+    ireplay.add_argument(
+        "--outcomes", nargs="*", help="Keep only these labels (solved/partial/wrong/bailed)"
+    )
     rfeat = sub.add_parser(
         "router-features", help="Flatten a router capture run into per-token JSONL + npz"
     )
@@ -379,6 +400,35 @@ def main(argv=None):
                 "specs": [str(p) for p in paths],
                 "samples": sum(len(s.samples) for s in specs),
                 "submitted": submitted,
+            }
+        )
+    elif args.command == "inspect-replay":
+        from .harbor_replay import write_specs
+        from .inspect_replay import build_inspect_specs
+
+        specs, summary = build_inspect_specs(
+            args.log,
+            stage=args.stage,
+            checkpoints=panel(args.checkpoints),
+            run_prefix=args.run_prefix,
+            scorer=args.scorer,
+            trace_dir=args.trace_dir,
+            window=args.window,
+            layers=args.layers,
+            sites=args.sites,
+            max_bytes=args.max_bytes,
+            max_seconds=args.max_seconds,
+            max_context=args.max_context,
+            per_trial=args.per_trial,
+            outcomes=args.outcomes,
+        )
+        paths = write_specs(specs, args.output)
+        emit(
+            {
+                "specs": [str(p) for p in paths],
+                "samples": sum(len(s.samples) for s in specs),
+                "trials": summary["trials"],
+                "skipped": summary["skipped"],
             }
         )
     elif args.command == "router-features":

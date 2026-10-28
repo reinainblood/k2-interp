@@ -200,10 +200,16 @@ def turn_spans(frozen: dict) -> list[dict]:
     return spans
 
 
-def windows(frozen: dict, size: int = 256) -> dict[str, list[int]]:
-    """Absolute positions of the impasse, early, and (if available) midpoint windows."""
+def windows(frozen: dict, size: int = 256, commit_turn: int | None = None) -> dict[str, list[int]]:
+    """Absolute positions of the impasse, early, and (if available) midpoint windows.
+
+    With ``commit_turn`` (the turn that answered the first failing subproblem of a
+    multi-step task), a ``commit`` window of ``size`` tokens centred on the start of
+    that turn's completion is added when the turn can be located.
+    """
     sequence = frozen["final_sequence"]
-    spans = [s for s in turn_spans(frozen) if s["start"] is not None]
+    located = turn_spans(frozen)
+    spans = [s for s in located if s["start"] is not None]
     out: dict[str, list[int]] = {}
     if not spans:
         return out
@@ -216,6 +222,11 @@ def windows(frozen: dict, size: int = 256) -> dict[str, list[int]]:
         out["early"] = list(range(early_start, early_end))
     mid = len(sequence) // 2
     out["midpoint"] = list(range(max(0, mid - size // 2), min(len(sequence), mid + size // 2)))
+    if commit_turn is not None:
+        span = next((s for s in spans if s["turn"] == commit_turn), None)
+        if span is not None:
+            lo = max(0, span["start"] - size // 2)
+            out["commit"] = list(range(lo, min(len(sequence), lo + size)))
     return out
 
 
@@ -282,6 +293,8 @@ def trial_sample(trial: dict) -> Sample:
     if trial["verifier"]:
         labels["verifier_status"] = str(trial["verifier"].get("status"))
         labels["valid"] = bool(trial["verifier"].get("valid"))
+    # Runners other than Harbor (e.g. Inspect) attach their own labels here.
+    labels.update(trial.get("extra_labels") or {})
     return Sample(
         id=trial["trial_name"],
         # Prefill captures every prompt row in one forward; the final token is the
@@ -345,13 +358,22 @@ def build_specs(
     max_context: int = 262144,
     per_trial: bool = False,
     outcomes: list[str] | None = None,
+    trials: list[dict] | None = None,
+    source: str = "harbor",
+    protocol_extra: dict | None = None,
 ) -> list[RunSpec]:
-    """One RunSpec per checkpoint (or per checkpoint and trial with per_trial)."""
+    """One RunSpec per checkpoint (or per checkpoint and trial with per_trial).
+
+    ``trials`` lets another runner (see :mod:`k2_interp.inspect_replay`) pass
+    preloaded trial dicts of the same shape :func:`load_trials` returns; ``job`` is
+    then only recorded in the protocol. A trial may carry ``commit_turn`` to add a
+    ``commit`` window in stage b2.
+    """
     for checkpoint in checkpoints:
         if checkpoint not in CHECKPOINTS:
             raise ValueError(f"Unknown checkpoint {checkpoint!r}")
     sites = sites or ["resid_post", "moe_out"]
-    trials = load_trials(job)
+    trials = load_trials(job) if trials is None else list(trials)
     if outcomes:
         trials = [t for t in trials if t["outcome"] in outcomes]
     if not trials:
@@ -371,7 +393,7 @@ def build_specs(
                     )
                 samples.append(trial_sample(trial))
             if stage == "b2":
-                found = windows(group[0]["frozen"], window)
+                found = windows(group[0]["frozen"], window, group[0].get("commit_turn"))
                 if not found:
                     raise ValueError(f"{group[0]['trial_name']}: no turn could be located")
                 positions = sorted({p for ps in found.values() for p in ps})
@@ -381,6 +403,18 @@ def build_specs(
             )
             suffix = group[0]["trial_name"] if per_trial else "all"
             run_id = f"{run_prefix}-{stage}-{suffix}"[:120]
+            protocol = {
+                "source": source,
+                "job": str(Path(job).resolve()),
+                "stage": stage,
+                "window": window if stage == "b2" else None,
+                "windows": window_index,
+                "trials": [t["trial_name"] for t in group],
+            }
+            commits = {t["trial_name"]: t["commit"] for t in group if t.get("commit")}
+            if commits:
+                protocol["commit"] = commits
+            protocol.update(protocol_extra or {})
             specs.append(
                 RunSpec(
                     run_id=run_id,
@@ -390,14 +424,7 @@ def build_specs(
                     generation=GenerationSpec(max_new_tokens=0, temperature=0, seed=0),
                     max_context=max_context,
                     max_seconds=max_seconds,
-                    protocol={
-                        "source": "harbor",
-                        "job": str(Path(job).resolve()),
-                        "stage": stage,
-                        "window": window if stage == "b2" else None,
-                        "windows": window_index,
-                        "trials": [t["trial_name"] for t in group],
-                    },
+                    protocol=protocol,
                 )
             )
     return specs
